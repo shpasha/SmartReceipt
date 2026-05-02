@@ -29,33 +29,39 @@ export default function LogsPage() {
   const [since, setSince] = useState(SINCE_PRESETS[1].value);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (paused) return;
-    setError(null);
-    setLoading(true);
-    const es = new EventSource(
-      apiUrl(`/api/logs/stream?since=${encodeURIComponent(since)}`),
-    );
-    es.onopen = () => setLoading(false);
-    es.onmessage = (ev) => {
+  const load = useMemo(() => {
+    return async () => {
+      setLoading(true);
+      setError(null);
       try {
-        const { line } = JSON.parse(ev.data) as { line: string };
-        const parsed = parseLine(line);
-        setLines((prev) => [parsed, ...prev].slice(0, 1000));
-      } catch {
-        /* ignore */
+        const res = await fetch(
+          apiUrl(`/api/logs?since=${encodeURIComponent(since)}&n=500`),
+        );
+        if (!res.ok) {
+          setError(`HTTP ${res.status}`);
+          return;
+        }
+        const text = await res.text();
+        const parsed = text
+          .split("\n")
+          .filter((l) => l.trim())
+          .map(parseLine)
+          .reverse();
+        setLines(parsed);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "ошибка");
+      } finally {
+        setLoading(false);
       }
     };
-    es.onerror = () => {
-      setError("стрим прервался — переподключаюсь");
-      es.close();
-    };
-    return () => es.close();
-  }, [paused, since]);
+  }, [since]);
 
   useEffect(() => {
-    setLines([]);
-  }, [since]);
+    if (paused) return;
+    load();
+    const t = setInterval(load, 5000);
+    return () => clearInterval(t);
+  }, [paused, load]);
 
   const filtered = useMemo(() => {
     const f = filter.trim().toLowerCase();

@@ -13,6 +13,7 @@ const Item = z.object({
 const Body = z.object({
   receiptId: z.string(),
   hostName: z.string().min(1).max(40),
+  name: z.string().min(1).max(60),
   draft: z
     .object({
       items: z.array(Item),
@@ -32,10 +33,10 @@ export async function POST(req: Request) {
   if (body.draft) {
     receipts.update(body.receiptId, body.draft);
   }
-  const { room, host } = rooms.create(body.receiptId, body.hostName);
+  const { room, host } = rooms.create(body.receiptId, body.hostName, body.name);
   logEvent("room.create", {
     code: room.code,
-    receipt: body.receiptId,
+    name: room.name,
     host: body.hostName,
     items: body.draft?.items.length,
   });

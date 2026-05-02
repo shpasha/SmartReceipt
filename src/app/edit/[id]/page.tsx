@@ -15,6 +15,7 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
   const router = useRouter();
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [hostName, setHostName] = useState("");
+  const [roomName, setRoomName] = useState("");
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
@@ -48,7 +49,7 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
   }
 
   async function createRoom() {
-    if (!hostName.trim() || !receipt) return;
+    if (!hostName.trim() || !roomName.trim() || !receipt) return;
     setCreating(true);
     const res = await fetch(apiUrl("/api/rooms"), {
       method: "POST",
@@ -56,6 +57,7 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
       body: JSON.stringify({
         receiptId: id,
         hostName,
+        name: roomName.trim(),
         draft: {
           items: receipt.items,
           serviceCharge: receipt.serviceCharge,
@@ -166,9 +168,18 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
         </div>
       </section>
 
-      <div className="card mt-6 p-5">
-        <div className="font-medium mb-1">Создать комнату</div>
-        <p className="text-sm text-mute mb-4">Друзья подключатся по коду и выберут что ели.</p>
+      <div className="card mt-6 p-5 space-y-3">
+        <div>
+          <div className="font-medium mb-1">Создать комнату</div>
+          <p className="text-sm text-mute">Друзья подключатся по коду и выберут что ели.</p>
+        </div>
+        <input
+          className="input w-full"
+          placeholder="Название (например, «Вечер четверга в Saperavi»)"
+          value={roomName}
+          maxLength={60}
+          onChange={(e) => setRoomName(e.target.value)}
+        />
         <div className="flex gap-2">
           <input
             className="input w-full"
@@ -176,7 +187,11 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
             value={hostName}
             onChange={(e) => setHostName(e.target.value)}
           />
-          <button onClick={createRoom} disabled={!hostName.trim() || creating} className="btn btn-primary whitespace-nowrap">
+          <button
+            onClick={createRoom}
+            disabled={!hostName.trim() || !roomName.trim() || creating}
+            className="btn btn-primary whitespace-nowrap"
+          >
             {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
             Создать
           </button>

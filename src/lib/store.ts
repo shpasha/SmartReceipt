@@ -114,12 +114,13 @@ export const receipts = {
 };
 
 export const rooms = {
-  create(receiptId: string, hostName: string): { room: Room; host: Participant } {
+  create(receiptId: string, hostName: string, name: string): { room: Room; host: Participant } {
     const code = generateCode();
     const host: Participant = makeParticipant(hostName);
     const now = Date.now();
     const room: Room = {
       code,
+      name,
       receiptId,
       hostId: host.id,
       createdAt: now,
@@ -141,13 +142,23 @@ export const rooms = {
     code: string,
     name: string,
   ): { room: Room; participant: Participant } | { error: "not_found" | "name_taken" } {
-    const room = store.rooms.get(code);
+    let room = store.rooms.get(code);
     if (!room) return { error: "not_found" };
     const trimmed = name.trim();
-    const exists = room.participants.some(
+    const taken = room.participants.find(
       (p) => p.name.toLowerCase() === trimmed.toLowerCase(),
     );
-    if (exists) return { error: "name_taken" };
+    if (taken) {
+      const presenceMap = store.presence.get(code);
+      const onlineCount = presenceMap?.get(taken.id)?.count ?? 0;
+      const hasSelections = room.selections.some((s) => s.participantId === taken.id);
+      if (onlineCount > 0 || hasSelections) return { error: "name_taken" };
+      room = {
+        ...room,
+        participants: room.participants.filter((p) => p.id !== taken.id),
+      };
+      presenceMap?.delete(taken.id);
+    }
     const participant = makeParticipant(trimmed);
     const next: Room = {
       ...room,

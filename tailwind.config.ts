@@ -3,15 +3,6 @@ import type { Config } from "tailwindcss";
 export default {
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
-    // TEMP: bump mobile breakpoint for desktop debugging.
-    // Default sm=640. Restore by removing this override.
-    screens: {
-      sm: "1100px",
-      md: "1100px",
-      lg: "1280px",
-      xl: "1536px",
-      "2xl": "1700px",
-    },
     extend: {
       colors: {
         bg: "#0a0a0f",

@@ -36,6 +36,7 @@ export interface Selection {
 
 export interface Room {
   code: string;
+  name: string;
   receiptId: ID;
   hostId: ID;
   createdAt: number;

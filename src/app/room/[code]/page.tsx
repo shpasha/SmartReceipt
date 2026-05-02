@@ -85,6 +85,7 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
       const data = await res.json();
       if (data.you) {
         localStorage.setItem(meKey(code), JSON.stringify(data.you));
+        if (data.room) setRoom(data.room);
         setMe(data.you);
       }
     })();
@@ -138,6 +139,7 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
       const data = await res.json();
       if (data.you) {
         localStorage.setItem(meKey(code), JSON.stringify(data.you));
+        if (data.room) setRoom(data.room);
         setMe(data.you);
       }
     } finally {
@@ -263,18 +265,18 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
   return (
     <main className="mx-auto max-w-2xl px-5 pt-8 pb-32">
       <div className="flex items-center justify-between mb-5">
-        <div>
-          <div className="text-mute text-xs uppercase tracking-widest">Комната</div>
+        <div className="min-w-0">
+          <div className="text-lg sm:text-xl font-semibold truncate">{room.name || `Комната ${code}`}</div>
           <button
             onClick={() => {
               navigator.clipboard.writeText(window.location.href);
               setCopied(true);
               setTimeout(() => setCopied(false), 1500);
             }}
-            className="flex items-center gap-2 text-2xl font-semibold tracking-[0.2em] hover:text-accent transition"
+            className="mt-0.5 flex items-center gap-2 text-mute text-sm font-mono tracking-[0.2em] hover:text-accent transition"
           >
             {code}
-            {copied ? <Check className="w-5 h-5 text-success" /> : <Copy className="w-4 h-4 opacity-60" />}
+            {copied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-3.5 h-3.5 opacity-60" />}
           </button>
         </div>
         <div className="flex flex-col items-end gap-1.5">
