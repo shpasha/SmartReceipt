@@ -198,7 +198,7 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
             }}
             placeholder="Имя"
           />
-          {trimmed && taken && (
+          {trimmed && taken && !joining && (
             <div className="mt-2 text-xs text-danger">
               Имя «{trimmed}» уже занято — выбери себя ниже или введи другое.
             </div>
@@ -390,10 +390,14 @@ function ItemCard({
   );
 
   const [focused, setFocused] = useState(false);
-  const maxFraction = Math.max(room.participants.length, 4);
-  const fractions: { n: number; label: string }[] = [];
+  const maxFraction = Math.max(10, room.participants.length);
+  const q = item.quantity;
+  const fractions: { n: number; label: string; value: number }[] = [];
   for (let n = 2; n <= maxFraction; n++) {
-    fractions.push({ n, label: fractionLabel(n) });
+    if (n === q) continue;
+    const value = Math.round((q / n) * 100) / 100;
+    const label = `${fmtUnitsShort(q)}/${n}`;
+    fractions.push({ n, label, value });
   }
 
   return (
@@ -455,22 +459,20 @@ function ItemCard({
 
       {focused && fractions.length > 0 ? (
         <div className="mt-2 flex flex-wrap gap-1.5">
-          {fractions.map(({ n, label }) => {
-            const v = Math.round((item.quantity / n) * 100) / 100;
-            const active = Math.abs(myUnits - v) < 1e-9;
+          {fractions.map(({ n, label, value }) => {
+            const active = Math.abs(myUnits - value) < 1e-9;
             return (
               <button
                 key={n}
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => onSet(v)}
+                onClick={() => onSet(value)}
                 className={cn(
-                  "inline-flex items-center justify-center w-9 h-7 rounded-full text-base leading-none border whitespace-nowrap transition",
+                  "inline-flex items-center justify-center min-w-9 h-7 px-2 rounded-full text-base leading-none border whitespace-nowrap transition",
                   active
                     ? "bg-accent/20 border-accent/40 text-ink"
                     : "bg-white/[0.04] border-white/10 text-mute hover:bg-white/[0.08]",
                 )}
-                title={`${label} от ${fmtUnits(item.quantity)} = ${fmtUnitsShort(v)}`}
               >
                 {label}
               </button>
@@ -590,6 +592,14 @@ function UnitsStepper({
           }}
           inputMode="decimal"
           title="Можно ввести точное значение"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          name="units"
+          data-1p-ignore
+          data-lpignore="true"
+          data-form-type="other"
           className="peer w-12 h-8 text-center font-semibold text-sm tabular-nums bg-transparent outline-none rounded cursor-text text-ink"
           aria-label="Сколько съел — можно ввести точное значение"
         />
@@ -608,22 +618,6 @@ function UnitsStepper({
       </button>
     </div>
   );
-}
-
-const FRACTION_GLYPHS: Record<number, string> = {
-  2: "½",
-  3: "⅓",
-  4: "¼",
-  5: "⅕",
-  6: "⅙",
-  7: "⅐",
-  8: "⅛",
-  9: "⅑",
-  10: "⅒",
-};
-
-function fractionLabel(n: number) {
-  return FRACTION_GLYPHS[n] ?? `1/${n}`;
 }
 
 function fmtUnits(n: number) {
