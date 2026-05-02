@@ -9,3 +9,15 @@ export interface ParsedReceipt {
 export interface OCRProvider {
   parse(image: { base64: string; mimeType: string }): Promise<ParsedReceipt>;
 }
+
+export type OCRErrorKind = "not_a_receipt" | "parse_failed" | "transient";
+
+export class OCRError extends Error {
+  kind: OCRErrorKind;
+  raw?: string;
+  constructor(kind: OCRErrorKind, message: string, raw?: string) {
+    super(message);
+    this.kind = kind;
+    this.raw = raw;
+  }
+}

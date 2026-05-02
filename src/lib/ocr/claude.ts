@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { fetch as undiciFetch, ProxyAgent } from "undici";
 import type { OCRProvider, ParsedReceipt } from "./types";
+import { OCRError } from "./types";
 
 function buildFetch(): typeof fetch | undefined {
   const proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy;
@@ -69,27 +70,40 @@ export class ClaudeOCRProvider implements OCRProvider {
   }
 
   async parse(image: { base64: string; mimeType: string }): Promise<ParsedReceipt> {
-    const res = await this.client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 2048,
-      system: SYSTEM,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: image.mimeType as "image/jpeg" | "image/png" | "image/webp" | "image/gif",
-                data: image.base64,
+    let res;
+    try {
+      res = await this.client.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 2048,
+        system: SYSTEM,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: image.mimeType as "image/jpeg" | "image/png" | "image/webp" | "image/gif",
+                  data: image.base64,
+                },
               },
-            },
-            { type: "text", text: "Parse this receipt into JSON matching the schema." },
-          ],
-        },
-      ],
-    });
+              { type: "text", text: "Parse this receipt into JSON matching the schema." },
+            ],
+          },
+        ],
+      });
+    } catch (err) {
+      const status = (err as { status?: number })?.status;
+      const msg = err instanceof Error ? err.message : String(err);
+      if (status === 400 && /image|media|could not process|invalid/i.test(msg)) {
+        throw new OCRError("not_a_receipt", "На фото не похоже на чек — попробуй ещё раз");
+      }
+      if (status && status >= 400 && status < 500) {
+        throw new OCRError("parse_failed", "Не удалось распознать чек. Попробуй сделать фото ярче и без бликов");
+      }
+      throw new OCRError("transient", "Сервис распознавания временно недоступен. Попробуй ещё раз через минуту");
+    }
 
     const text = res.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
@@ -100,8 +114,37 @@ export class ClaudeOCRProvider implements OCRProvider {
       console.log("[OCR raw]", text);
     }
 
-    const json = extractJSON(text);
-    return Schema.parse(json);
+    let json: unknown;
+    try {
+      json = extractJSON(text);
+    } catch {
+      throw new OCRError(
+        "parse_failed",
+        "Не удалось распознать позиции. Попробуй сделать фото ярче и без бликов",
+        text,
+      );
+    }
+
+    let parsed: ParsedReceipt;
+    try {
+      parsed = Schema.parse(json);
+    } catch {
+      throw new OCRError(
+        "parse_failed",
+        "Не удалось распознать позиции. Попробуй сделать фото ярче и без бликов",
+        text,
+      );
+    }
+
+    if (parsed.items.length === 0 && parsed.total === 0) {
+      throw new OCRError(
+        "not_a_receipt",
+        "На фото не похоже на чек — попробуй ещё раз",
+        text,
+      );
+    }
+
+    return parsed;
   }
 }
 
