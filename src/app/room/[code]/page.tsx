@@ -1,0 +1,615 @@
+"use client";
+
+import { use, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { AlertTriangle, Check, Copy, Home, LogOut, Minus, Plus, Users } from "lucide-react";
+import type { Participant, Receipt, Room } from "@/lib/domain/types";
+import { claimedUnits, computeTotals, itemTotal, userUnits } from "@/lib/domain/totals";
+import { formatMoney, cn, participantColor } from "@/lib/utils";
+import { apiUrl } from "@/lib/api";
+
+const meKey = (code: string) => `room:${code}:me`;
+
+export default function RoomPage({ params }: { params: Promise<{ code: string }> }) {
+  const { code: raw } = use(params);
+  const code = raw.toUpperCase();
+  const [room, setRoom] = useState<Room | null>(null);
+  const [receipt, setReceipt] = useState<Receipt | null>(null);
+  const [me, setMe] = useState<Participant | null>(null);
+  const [name, setName] = useState("");
+  const [joining, setJoining] = useState(false);
+  const [notFound, setNotFound] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(meKey(code));
+    if (stored) {
+      try {
+        setMe(JSON.parse(stored));
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [code]);
+
+  useEffect(() => {
+    const url = me
+      ? `/api/rooms/${code}/events?pid=${encodeURIComponent(me.id)}`
+      : `/api/rooms/${code}/events`;
+    const es = new EventSource(apiUrl(url));
+    es.onmessage = (ev) => {
+      const data = JSON.parse(ev.data);
+      if (data.type === "snapshot") {
+        setRoom(data.room);
+        setReceipt(data.receipt);
+      } else if (data.type === "room") setRoom(data.room);
+      else if (data.type === "receipt") setReceipt(data.receipt);
+    };
+    es.onerror = () => {
+      es.close();
+    };
+    return () => es.close();
+  }, [code, me?.id]);
+
+  useEffect(() => {
+    fetch(apiUrl(`/api/rooms/${code}`)).then(async (r) => {
+      if (r.status === 404) setNotFound(true);
+    });
+  }, [code]);
+
+  useEffect(() => {
+    if (!me || !room) return;
+    if (room.participants.some((p) => p.id === me.id)) return;
+    let cancelled = false;
+    (async () => {
+      const res = await fetch(apiUrl(`/api/rooms/${code}/join`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: me.name }),
+      });
+      if (cancelled) return;
+      if (res.status === 409) {
+        localStorage.removeItem(meKey(code));
+        setMe(null);
+        setName(me.name);
+        setJoinError("Твоё имя уже занято — выбери себя из списка или введи другое.");
+        return;
+      }
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.you) {
+        localStorage.setItem(meKey(code), JSON.stringify(data.you));
+        setMe(data.you);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [code, me, room]);
+
+  function claim(p: Participant) {
+    localStorage.setItem(meKey(code), JSON.stringify(p));
+    setMe(p);
+  }
+
+  async function signOut() {
+    if (me) {
+      try {
+        await fetch(apiUrl(`/api/rooms/${code}/leave`), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ participantId: me.id }),
+          keepalive: true,
+        });
+      } catch {
+        /* ignore — user is leaving anyway */
+      }
+    }
+    localStorage.removeItem(meKey(code));
+    setMe(null);
+    setName("");
+  }
+
+  async function joinAsNew() {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setJoinError(null);
+    setJoining(true);
+    try {
+      const res = await fetch(apiUrl(`/api/rooms/${code}/join`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed }),
+      });
+      if (res.status === 409) {
+        setJoinError("Это имя уже занято — выбери себя из списка или введи другое.");
+        return;
+      }
+      if (!res.ok) {
+        setJoinError("Не получилось войти. Попробуй ещё раз.");
+        return;
+      }
+      const data = await res.json();
+      if (data.you) {
+        localStorage.setItem(meKey(code), JSON.stringify(data.you));
+        setMe(data.you);
+      }
+    } finally {
+      setJoining(false);
+    }
+  }
+
+  async function setUnits(itemId: string, units: number) {
+    if (!me) return;
+    await fetch(apiUrl(`/api/rooms/${code}/select`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ itemId, participantId: me.id, units }),
+    });
+  }
+
+  const totals = useMemo(() => (receipt && room ? computeTotals(receipt, room) : []), [receipt, room]);
+
+  if (notFound) {
+    return (
+      <main className="mx-auto max-w-md px-5 pt-24 text-center">
+        <h1 className="text-xl font-medium mb-2">Комната не найдена</h1>
+        <p className="text-mute text-sm">Проверь код и попробуй ещё раз.</p>
+      </main>
+    );
+  }
+
+  if (!me) {
+    const participants = room?.participants ?? [];
+    const trimmed = name.trim();
+    const taken = participants.some(
+      (p) => p.name.toLowerCase() === trimmed.toLowerCase(),
+    );
+    return (
+      <main className="mx-auto max-w-md px-5 pt-12 pb-24">
+        <div className="chip mb-4">
+          <Users className="w-3.5 h-3.5" /> Комната {code}
+        </div>
+
+        <div className="card p-6">
+          <div className="font-medium mb-1">Зайти новым человеком</div>
+          <p className="text-mute text-sm mb-4">Введи имя — друзья увидят его в комнате.</p>
+          <input
+            className="input w-full"
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              if (joinError) setJoinError(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && trimmed && !taken) joinAsNew();
+            }}
+            placeholder="Имя"
+          />
+          {trimmed && taken && (
+            <div className="mt-2 text-xs text-danger">
+              Имя «{trimmed}» уже занято — выбери себя ниже или введи другое.
+            </div>
+          )}
+          {joinError && <div className="mt-2 text-xs text-danger">{joinError}</div>}
+          <button
+            onClick={joinAsNew}
+            disabled={!trimmed || taken || joining}
+            className="btn btn-primary w-full mt-4"
+          >
+            Войти
+          </button>
+        </div>
+
+        {participants.length > 0 && (
+          <>
+            <div className="flex items-center gap-3 my-5 text-xs text-mute uppercase tracking-wider">
+              <div className="flex-1 h-px bg-white/10" />
+              или продолжить как
+              <div className="flex-1 h-px bg-white/10" />
+            </div>
+
+            <div className="card p-2">
+              <div className="space-y-1">
+                {participants.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => claim(p)}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-white/[0.05] transition text-left"
+                  >
+                    <span
+                      className="w-9 h-9 rounded-full grid place-items-center text-sm font-semibold text-bg shrink-0"
+                      style={{ background: participantColor(p.id) }}
+                    >
+                      {p.name.slice(0, 1).toUpperCase()}
+                    </span>
+                    <span className="font-medium truncate">{p.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        <div className="mt-6 flex justify-center">
+          <Link href="/" className="text-sm text-mute hover:text-ink transition flex items-center gap-1.5">
+            <Home className="w-4 h-4" /> На главную
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  if (!room || !receipt) {
+    return (
+      <main className="mx-auto max-w-2xl px-5 pt-12 space-y-3">
+        <div className="skeleton h-8 w-1/3" />
+        <div className="skeleton h-20 w-full mt-6" />
+        <div className="skeleton h-20 w-full" />
+      </main>
+    );
+  }
+
+  return (
+    <main className="mx-auto max-w-2xl px-5 pt-8 pb-32">
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <div className="text-mute text-xs uppercase tracking-widest">Комната</div>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(window.location.href);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            }}
+            className="flex items-center gap-2 text-2xl font-semibold tracking-[0.2em] hover:text-accent transition"
+          >
+            {code}
+            {copied ? <Check className="w-5 h-5 text-success" /> : <Copy className="w-4 h-4 opacity-60" />}
+          </button>
+        </div>
+        <div className="flex flex-col items-end gap-1.5">
+          <ParticipantsStrip participants={room.participants} meId={me.id} />
+          <button
+            onClick={signOut}
+            className="text-xs text-mute hover:text-ink transition flex items-center gap-1"
+            title={`Выйти из роли «${me.name}»`}
+          >
+            <LogOut className="w-3 h-3" />
+            Выйти
+          </button>
+        </div>
+      </div>
+
+      <div className="card divide-y divide-white/5 overflow-hidden">
+        {receipt.items.map((item) => (
+          <ItemCard
+            key={item.id}
+            item={item}
+            currency={receipt.currency}
+            room={room}
+            me={me}
+            onSet={(u) => setUnits(item.id, u)}
+          />
+        ))}
+      </div>
+
+      <section className="mt-6">
+        <div className="text-sm text-mute mb-2 px-1">Расчёт</div>
+        <div className="card p-4 space-y-4">
+          {totals.every((t) => t.subtotal === 0) ? (
+            <div className="text-mute text-sm text-center py-4">Никто ещё ничего не выбрал</div>
+          ) : (
+            totals.map((t) => (
+              <div key={t.participant.id} className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Avatar p={t.participant} />
+                  <div>
+                    <div className="font-medium">
+                      {t.participant.name}
+                      {t.participant.id === me.id && <span className="text-mute text-xs ml-2">(ты)</span>}
+                    </div>
+                    {t.share > 0 && (
+                      <div className="text-xs text-mute">
+                        + {formatMoney(t.share, receipt.currency)} сервис/налог
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right tabular-nums">
+                  <div className="font-semibold">{formatMoney(t.total, receipt.currency)}</div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+
+      <div className="mt-8 flex justify-center">
+        <Link href="/" className="btn btn-ghost">
+          <Home className="w-4 h-4" /> На главную
+        </Link>
+      </div>
+    </main>
+  );
+}
+
+function ItemCard({
+  item,
+  currency,
+  room,
+  me,
+  onSet,
+}: {
+  item: Receipt["items"][number];
+  currency: string;
+  room: Room;
+  me: Participant;
+  onSet: (units: number) => void;
+}) {
+  const myUnits = userUnits(room, item.id, me.id);
+  const claimed = claimedUnits(room, item.id);
+  const remaining = Math.max(0, item.quantity - claimed);
+  const overclaimed = claimed > item.quantity + 0.02;
+
+  const eaters = room.selections
+    .filter((s) => s.itemId === item.id && s.units > 0)
+    .map((s) => ({
+      p: room.participants.find((x) => x.id === s.participantId)!,
+      units: s.units,
+    }))
+    .filter((e) => e.p);
+
+  const fullyClaimed = claimed > 0 && Math.abs(claimed - item.quantity) < 0.02;
+  const showStatus = claimed > 0 && !fullyClaimed && (overclaimed || remaining > 0);
+  const allEaters = [...eaters].sort((a, b) =>
+    a.p.id === me.id ? -1 : b.p.id === me.id ? 1 : 0,
+  );
+
+  return (
+    <div
+      className={cn(
+        "p-4 relative transition-colors",
+        overclaimed
+          ? "bg-danger/[0.07]"
+          : fullyClaimed
+          ? "bg-success/[0.07]"
+          : myUnits > 0
+          ? "bg-accent/5"
+          : "",
+      )}
+    >
+      {(fullyClaimed || overclaimed) && (
+        <span
+          aria-hidden
+          className={cn(
+            "absolute left-0 top-0 bottom-0 w-0.5",
+            overclaimed ? "bg-danger" : "bg-success",
+          )}
+        />
+      )}
+      <div className="flex items-center gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="font-medium truncate flex items-center gap-2">
+            {overclaimed ? (
+              <span
+                className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-danger/20 text-danger shrink-0"
+                title="Разобрано больше чем в чеке"
+              >
+                <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2.5} />
+              </span>
+            ) : fullyClaimed ? (
+              <span
+                className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-success/20 text-success shrink-0"
+                title="Позиция полностью разобрана"
+              >
+                <Check className="w-3.5 h-3.5" strokeWidth={3} />
+              </span>
+            ) : null}
+            <span className="truncate">{item.name}</span>
+          </div>
+          <div className="text-xs text-mute mt-0.5 flex items-center gap-1.5 flex-wrap tabular-nums">
+            {item.quantity > 1 ? (
+              <span>
+                {fmtUnits(item.quantity)} × {formatMoney(item.unitPrice, currency)} ={" "}
+                <span className="text-ink/80">{formatMoney(itemTotal(item), currency)}</span>
+              </span>
+            ) : (
+              <span className="text-ink/80">{formatMoney(itemTotal(item), currency)}</span>
+            )}
+          </div>
+        </div>
+
+        <UnitsStepper value={myUnits} onChange={onSet} />
+      </div>
+
+      {allEaters.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+              {allEaters.map(({ p, units }) => {
+                const isMe = p.id === me.id;
+                return (
+                  <span
+                    key={p.id}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs border whitespace-nowrap",
+                      isMe
+                        ? "bg-white/[0.08] border-white/15 text-ink font-medium"
+                        : "bg-white/[0.03] border-white/10 text-mute",
+                    )}
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ background: participantColor(p.id) }}
+                    />
+                    <span className="inline-flex items-center gap-0.5">
+                      <span>{p.name}</span>
+                      <span className="opacity-60">·</span>
+                      <span className="tabular-nums">{fmtUnits(units)}</span>
+                    </span>
+                  </span>
+                );
+              })}
+        </div>
+      )}
+
+      {showStatus && (
+        <div
+          className={cn(
+            "mt-3 text-xs flex items-center gap-1.5",
+            overclaimed ? "text-danger" : "text-mute",
+          )}
+        >
+          <span
+            className={cn(
+              "w-1.5 h-1.5 rounded-full",
+              overclaimed ? "bg-danger" : "bg-mute",
+            )}
+          />
+          {overclaimed
+            ? `разобрано ${fmtUnits(claimed)} — больше чем в чеке (${fmtUnits(item.quantity)})`
+            : `осталось разобрать ${fmtUnits(remaining)} из ${fmtUnits(item.quantity)}`}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UnitsStepper({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (units: number) => void;
+}) {
+  const [text, setText] = useState(fmtUnits(value));
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    if (!focused) setText(fmtUnits(value));
+  }, [value, focused]);
+
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+
+  const commit = () => {
+    const n = parseFloat(text.replace(",", "."));
+    if (Number.isFinite(n) && n >= 0) {
+      const r = round2(n);
+      if (Math.abs(r - value) > 1e-9) onChange(r);
+      else setText(fmtUnits(value));
+    } else {
+      setText(fmtUnits(value));
+    }
+  };
+
+  const active = value > 0;
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-0.5 rounded-full border p-1 shrink-0 transition",
+        active
+          ? "border-accent/60 bg-accent/15"
+          : "border-white/10 bg-white/[0.04]",
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => onChange(Math.max(0, round2(value - 1)))}
+        disabled={value === 0}
+        className="w-8 h-8 rounded-full grid place-items-center transition disabled:opacity-30 hover:bg-white/10"
+        aria-label="Меньше"
+      >
+        <Minus className="w-4 h-4" strokeWidth={2.5} />
+      </button>
+      <div className="relative">
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onFocus={(e) => {
+            setFocused(true);
+            e.currentTarget.select();
+          }}
+          onBlur={() => {
+            setFocused(false);
+            commit();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              (e.currentTarget as HTMLInputElement).blur();
+            }
+            if (e.key === "Escape") {
+              setText(fmtUnits(value));
+              (e.currentTarget as HTMLInputElement).blur();
+            }
+          }}
+          inputMode="decimal"
+          title="Можно ввести точное значение"
+          className="peer w-10 h-8 text-center font-semibold text-sm tabular-nums bg-transparent outline-none rounded cursor-text text-ink"
+          aria-label="Сколько съел — можно ввести точное значение"
+        />
+        <span
+          aria-hidden
+          className="pointer-events-none absolute left-1.5 right-1.5 bottom-0.5 h-px text-mute [background-image:repeating-linear-gradient(to_right,currentColor_0,currentColor_2px,transparent_2px,transparent_4px)]"
+        />
+      </div>
+      <button
+        type="button"
+        onClick={() => onChange(round2(value + 1))}
+        className="w-8 h-8 rounded-full grid place-items-center transition hover:bg-white/10"
+        aria-label="Больше"
+      >
+        <Plus className="w-4 h-4" strokeWidth={2.5} />
+      </button>
+    </div>
+  );
+}
+
+function fmtUnits(n: number) {
+  if (Math.abs(n) < 1e-9) return "0";
+  if (Number.isInteger(n)) return String(n);
+  return n.toFixed(2).replace(/\.?0+$/, "");
+}
+
+function ParticipantsStrip({ participants, meId }: { participants: Participant[]; meId: string }) {
+  const MAX = 5;
+  const overflow = participants.length > MAX;
+  const visible = overflow ? participants.slice(0, MAX - 1) : participants;
+  const rest = overflow ? participants.slice(MAX - 1) : [];
+  return (
+    <div className="flex -space-x-2">
+      {visible.map((p) => (
+        <div
+          key={p.id}
+          className={cn(
+            "w-8 h-8 rounded-full border-2 grid place-items-center text-xs font-semibold text-bg",
+            p.id === meId ? "border-white" : "border-bg",
+          )}
+          style={{ background: participantColor(p.id) }}
+          title={p.name}
+        >
+          {p.name.slice(0, 1).toUpperCase()}
+        </div>
+      ))}
+      {overflow && (
+        <div
+          className="w-8 h-8 rounded-full bg-surface2 border-2 border-bg grid place-items-center text-xs font-semibold text-mute"
+          title={rest.map((p) => p.name).join(", ")}
+        >
+          +{rest.length}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Avatar({ p }: { p: Participant }) {
+  return (
+    <div
+      className="w-8 h-8 rounded-full grid place-items-center text-xs font-semibold text-bg"
+      style={{ background: participantColor(p.id) }}
+    >
+      {p.name.slice(0, 1).toUpperCase()}
+    </div>
+  );
+}
