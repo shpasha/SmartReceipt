@@ -1,4 +1,6 @@
 import { nanoid } from "nanoid";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import type { Receipt, Room, ReceiptItem, Participant, Selection } from "./domain/types";
 import { bus, roomChannel } from "./events";
 
@@ -10,18 +12,64 @@ type Store = {
   presence: Map<string, Map<string, Presence>>;
 };
 
-const g = globalThis as unknown as { __smartreceiptStore?: Partial<Store> };
+const STATE_FILE = process.env.STATE_FILE
+  ? resolve(process.env.STATE_FILE)
+  : resolve(process.cwd(), "data", "state.json");
+
+const g = globalThis as unknown as {
+  __smartreceiptStore?: Partial<Store>;
+  __smartreceiptLoaded?: boolean;
+  __smartreceiptFlushTimer?: NodeJS.Timeout | null;
+};
 const existing = g.__smartreceiptStore ?? (g.__smartreceiptStore = {});
 existing.receipts ??= new Map();
 existing.rooms ??= new Map();
 existing.presence ??= new Map();
 const store = existing as Store;
 
+if (!g.__smartreceiptLoaded) {
+  g.__smartreceiptLoaded = true;
+  try {
+    const raw = readFileSync(STATE_FILE, "utf8");
+    const data = JSON.parse(raw) as { receipts?: Receipt[]; rooms?: Room[] };
+    for (const r of data.receipts ?? []) store.receipts.set(r.id, r);
+    for (const r of data.rooms ?? []) store.rooms.set(r.code, r);
+    console.log(
+      `event=state.loaded receipts=${store.receipts.size} rooms=${store.rooms.size} file=${STATE_FILE}`,
+    );
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException)?.code;
+    if (code !== "ENOENT") {
+      console.log(`event=state.load_failed file=${STATE_FILE} error="${(err as Error).message}"`);
+    }
+  }
+}
+
+function persist() {
+  if (g.__smartreceiptFlushTimer) return;
+  g.__smartreceiptFlushTimer = setTimeout(() => {
+    g.__smartreceiptFlushTimer = null;
+    try {
+      mkdirSync(dirname(STATE_FILE), { recursive: true });
+      const payload = JSON.stringify({
+        receipts: [...store.receipts.values()],
+        rooms: [...store.rooms.values()],
+      });
+      const tmp = `${STATE_FILE}.tmp`;
+      writeFileSync(tmp, payload);
+      renameSync(tmp, STATE_FILE);
+    } catch (err) {
+      console.log(`event=state.flush_failed error="${(err as Error).message}"`);
+    }
+  }, 500);
+}
+
 
 export const receipts = {
   create(input: Omit<Receipt, "id" | "createdAt">): Receipt {
     const r: Receipt = { id: nanoid(10), createdAt: Date.now(), ...input };
     store.receipts.set(r.id, r);
+    persist();
     return r;
   },
   get(id: string) {
@@ -32,6 +80,7 @@ export const receipts = {
     if (!cur) return undefined;
     const next: Receipt = { ...cur, ...patch };
     store.receipts.set(id, next);
+    persist();
     return next;
   },
   upsertItem(id: string, item: Partial<ReceiptItem> & { id?: string }) {
@@ -51,6 +100,7 @@ export const receipts = {
     }
     const next = { ...cur, items };
     store.receipts.set(id, next);
+    persist();
     return next;
   },
   removeItem(id: string, itemId: string) {
@@ -58,6 +108,7 @@ export const receipts = {
     if (!cur) return undefined;
     const next = { ...cur, items: cur.items.filter((i) => i.id !== itemId) };
     store.receipts.set(id, next);
+    persist();
     return next;
   },
 };
@@ -77,6 +128,7 @@ export const rooms = {
       selections: [],
     };
     store.rooms.set(code, room);
+    persist();
     return { room, host };
   },
   get(code: string) {
@@ -103,6 +155,7 @@ export const rooms = {
       lastActivity: Date.now(),
     };
     store.rooms.set(code, next);
+    persist();
     return { room: next, participant };
   },
   setSelection(code: string, sel: Selection): Room | undefined {
@@ -114,6 +167,7 @@ export const rooms = {
     const selections = sel.units > 0 ? [...others, sel] : others;
     const next = { ...room, selections, lastActivity: Date.now() };
     store.rooms.set(code, next);
+    persist();
     return next;
   },
   bumpSelection(code: string, itemId: string, participantId: string, delta: number): Room | undefined {
@@ -126,19 +180,25 @@ export const rooms = {
     return this.setSelection(code, { itemId, participantId, units: next });
   },
 
-  removeIfEmpty(code: string, participantId: string): Room | undefined {
+  removeIfEmpty(
+    code: string,
+    participantId: string,
+  ): { room: Room; removed: boolean } | undefined {
     const room = store.rooms.get(code);
     if (!room) return undefined;
+    const present = room.participants.some((p) => p.id === participantId);
+    if (!present) return { room, removed: false };
     const hasSelections = room.selections.some((s) => s.participantId === participantId);
-    if (hasSelections) return room;
+    if (hasSelections) return { room, removed: false };
     const next: Room = {
       ...room,
       participants: room.participants.filter((p) => p.id !== participantId),
       lastActivity: Date.now(),
     };
     store.rooms.set(code, next);
+    persist();
     bus.publish(roomChannel(code), { type: "room", room: next });
-    return next;
+    return { room: next, removed: true };
   },
 
   openConnection(code: string, participantId: string) {

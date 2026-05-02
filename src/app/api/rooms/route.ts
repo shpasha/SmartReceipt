@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { receipts, rooms } from "@/lib/store";
+import { logEvent } from "@/lib/log";
 
 const Item = z.object({
   id: z.string(),
@@ -32,5 +33,11 @@ export async function POST(req: Request) {
     receipts.update(body.receiptId, body.draft);
   }
   const { room, host } = rooms.create(body.receiptId, body.hostName);
+  logEvent("room.create", {
+    code: room.code,
+    receipt: body.receiptId,
+    host: body.hostName,
+    items: body.draft?.items.length,
+  });
   return NextResponse.json({ room, you: host });
 }

@@ -18,20 +18,25 @@ const PARTICIPANT_PALETTE = [
   "#818cf8",
 ];
 
-export function participantColor(id: string) {
+export function participantColor(name: string) {
+  const key = name.trim().toLowerCase();
   let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
   return PARTICIPANT_PALETTE[h % PARTICIPANT_PALETTE.length];
 }
 
 export function formatMoney(value: number, currency: string) {
+  const rounded = Math.round(value * 100) / 100;
+  const isWhole = Math.abs(rounded - Math.trunc(rounded)) < 1e-9;
+  const fractionDigits = isWhole ? 0 : 2;
   try {
     return new Intl.NumberFormat("ru-RU", {
       style: "currency",
       currency: currency || "RUB",
-      maximumFractionDigits: 2,
-    }).format(value);
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
+    }).format(rounded);
   } catch {
-    return `${value.toFixed(2)} ${currency}`;
+    return `${rounded.toFixed(fractionDigits)} ${currency}`;
   }
 }

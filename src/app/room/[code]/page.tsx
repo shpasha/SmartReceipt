@@ -54,9 +54,6 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
       } else if (data.type === "room") setRoom(data.room);
       else if (data.type === "receipt") setReceipt(data.receipt);
     };
-    es.onerror = () => {
-      es.close();
-    };
     return () => es.close();
   }, [code, me?.id]);
 
@@ -232,7 +229,7 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
                   >
                     <span
                       className="w-9 h-9 rounded-full grid place-items-center text-sm font-semibold text-bg shrink-0"
-                      style={{ background: participantColor(p.id) }}
+                      style={{ background: participantColor(p.name) }}
                     >
                       {p.name.slice(0, 1).toUpperCase()}
                     </span>
@@ -463,7 +460,7 @@ function ItemCard({
                   >
                     <span
                       className="w-2 h-2 rounded-full shrink-0"
-                      style={{ background: participantColor(p.id) }}
+                      style={{ background: participantColor(p.name) }}
                     />
                     <span className="inline-flex items-center gap-0.5">
                       <span>{p.name}</span>
@@ -554,8 +551,7 @@ function UnitsStepper({
           }}
           inputMode="decimal"
           title="Можно ввести точное значение"
-          size={4}
-          className="peer h-8 px-1 text-center font-semibold text-sm tabular-nums bg-transparent outline-none rounded cursor-text text-ink box-content"
+          className="peer w-12 h-8 text-center font-semibold text-sm tabular-nums bg-transparent outline-none rounded cursor-text text-ink"
           aria-label="Сколько съел — можно ввести точное значение"
         />
         <span
@@ -600,7 +596,7 @@ function ParticipantsStrip({ participants, meId }: { participants: Participant[]
             "w-8 h-8 rounded-full border-2 grid place-items-center text-xs font-semibold text-bg",
             p.id === meId ? "border-white" : "border-bg",
           )}
-          style={{ background: participantColor(p.id) }}
+          style={{ background: participantColor(p.name) }}
           title={p.name}
         >
           {p.name.slice(0, 1).toUpperCase()}
@@ -637,8 +633,7 @@ function ProgressStrip({
   return (
     <div className="card p-4 mb-4">
       <div className="flex items-baseline justify-between text-sm mb-2">
-        <div className="text-mute">
-          Разобрано{" "}
+        <div>
           <span className={cn("tabular-nums font-medium", done ? "text-success" : "text-ink")}>
             {formatMoney(claimedTotal, receipt.currency)}
           </span>
@@ -665,7 +660,7 @@ function Avatar({ p }: { p: Participant }) {
   return (
     <div
       className="w-8 h-8 rounded-full grid place-items-center text-xs font-semibold text-bg"
-      style={{ background: participantColor(p.id) }}
+      style={{ background: participantColor(p.name) }}
     >
       {p.name.slice(0, 1).toUpperCase()}
     </div>

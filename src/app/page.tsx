@@ -41,7 +41,7 @@ export default function Home() {
           Раздели счёт <span className="whitespace-nowrap bg-gradient-to-r from-accent to-accent2 bg-clip-text text-transparent">по-умному</span>
         </h1>
         <p className="text-mute mt-4 max-w-lg mx-auto">
-          Загрузи чек из ресторана — мы распознаем позиции. Создай комнату, друзья выберут что ели — и каждый увидит свою долю.
+          Загрузи чек из ресторана — мы распознаем позиции. Создай комнату, друзья выберут что ели — и каждый увидит свою&nbsp;долю.
         </p>
       </header>
 

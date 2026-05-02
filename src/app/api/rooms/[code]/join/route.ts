@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { rooms } from "@/lib/store";
 import { bus, roomChannel } from "@/lib/events";
+import { logEvent } from "@/lib/log";
 
 const Body = z.object({ name: z.string().min(1).max(40) });
 
@@ -16,5 +17,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
     return NextResponse.json({ error: "name_taken" }, { status: 409 });
   }
   bus.publish(roomChannel(result.room.code), { type: "room", room: result.room });
+  logEvent("room.join", {
+    code: result.room.code,
+    name: result.participant.name,
+    total: result.room.participants.length,
+  });
   return NextResponse.json({ room: result.room, you: result.participant });
 }
