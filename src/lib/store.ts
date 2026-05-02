@@ -111,6 +111,14 @@ export const receipts = {
     persist();
     return next;
   },
+  replaceItems(id: string, items: ReceiptItem[]) {
+    const cur = store.receipts.get(id);
+    if (!cur) return undefined;
+    const next = { ...cur, items };
+    store.receipts.set(id, next);
+    persist();
+    return next;
+  },
 };
 
 export const rooms = {
@@ -234,6 +242,30 @@ export const rooms = {
     }
     map.delete(participantId);
     rooms.removeIfEmpty(code, participantId);
+  },
+
+  rename(code: string, name: string): Room | undefined {
+    const room = store.rooms.get(code);
+    if (!room) return undefined;
+    const next: Room = { ...room, name, lastActivity: Date.now() };
+    store.rooms.set(code, next);
+    persist();
+    bus.publish(roomChannel(code), { type: "room", room: next });
+    return next;
+  },
+
+  cleanOrphanSelections(receiptId: string, validItemIds: Set<string>): Room[] {
+    const affected: Room[] = [];
+    for (const room of store.rooms.values()) {
+      if (room.receiptId !== receiptId) continue;
+      const filtered = room.selections.filter((s) => validItemIds.has(s.itemId));
+      if (filtered.length === room.selections.length) continue;
+      const next: Room = { ...room, selections: filtered, lastActivity: Date.now() };
+      store.rooms.set(room.code, next);
+      affected.push(next);
+    }
+    if (affected.length > 0) persist();
+    return affected;
   },
 };
 

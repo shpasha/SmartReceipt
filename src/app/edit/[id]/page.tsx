@@ -2,9 +2,9 @@
 
 import { use, useEffect, useState } from "react";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { nanoid } from "nanoid";
-import { Plus, Trash2, ArrowRight, Loader2 } from "lucide-react";
+import { Plus, Trash2, ArrowRight, Check, Loader2 } from "lucide-react";
 import type { Receipt, ReceiptItem } from "@/lib/domain/types";
 import { apiUrl } from "@/lib/api";
 import { itemTotal, receiptSubtotal } from "@/lib/domain/totals";
@@ -13,10 +13,23 @@ import { formatMoney } from "@/lib/utils";
 export default function ReceiptPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const roomCode = searchParams.get("room");
+  const editMode = !!roomCode;
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [hostName, setHostName] = useState("");
   const [roomName, setRoomName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!roomCode) return;
+    fetch(apiUrl(`/api/rooms/${roomCode}`))
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.room?.name) setRoomName(d.room.name);
+      });
+  }, [roomCode]);
 
   useEffect(() => {
     fetch(apiUrl(`/api/receipts/${id}`))
@@ -46,6 +59,37 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
 
   function removeItem(itemId: string) {
     setReceipt((r) => (r ? { ...r, items: r.items.filter((i) => i.id !== itemId) } : r));
+  }
+
+  async function saveToRoom() {
+    if (!receipt || !roomCode) return;
+    setSaving(true);
+    try {
+      const [recRes] = await Promise.all([
+        fetch(apiUrl(`/api/receipts/${id}`), {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: receipt.items,
+            serviceCharge: receipt.serviceCharge,
+            tax: receipt.tax,
+            currency: receipt.currency,
+            comment: receipt.comment ?? "",
+          }),
+        }),
+        roomName.trim()
+          ? fetch(apiUrl(`/api/rooms/${roomCode}`), {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: roomName.trim() }),
+            })
+          : Promise.resolve(null),
+      ]);
+      if (recRes.ok) router.replace(`/room/${roomCode}`);
+      else setSaving(false);
+    } catch {
+      setSaving(false);
+    }
   }
 
   async function createRoom() {
@@ -94,15 +138,24 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
 
   return (
     <main className="mx-auto max-w-2xl px-5 pt-10 pb-24">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <div className="chip mb-2">Чек распознан</div>
-          <h1 className="text-2xl font-semibold">Проверь позиции</h1>
-        </div>
-        <button onClick={addItem} className="btn btn-ghost">
-          <Plus className="w-4 h-4" /> Позиция
-        </button>
+      <div className="mb-6">
+        {!editMode && <div className="chip mb-2">Чек распознан</div>}
+        <h1 className="text-2xl font-semibold">
+          {editMode ? "Внести правки" : "Проверь позиции"}
+        </h1>
       </div>
+
+      {editMode && (
+        <div className="mb-4">
+          <div className="text-sm text-mute mb-1.5 px-1">Название комнаты</div>
+          <input
+            className="input w-full"
+            value={roomName}
+            maxLength={60}
+            onChange={(e) => setRoomName(e.target.value)}
+          />
+        </div>
+      )}
 
       <div className="card overflow-hidden">
         <div className="hidden sm:grid px-4 py-2.5 grid-cols-[minmax(0,1fr)_80px_80px_minmax(96px,144px)_36px] gap-3 items-center text-xs uppercase tracking-wider text-mute border-b border-white/5 bg-white/[0.02]">
@@ -126,6 +179,12 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
           <div className="p-6 text-center text-mute text-sm">Нет позиций. Добавь вручную.</div>
         )}
         </div>
+        <button
+          onClick={addItem}
+          className="w-full flex items-center justify-center gap-2 py-3 text-sm text-mute hover:text-ink hover:bg-white/[0.03] border-t border-white/5 transition"
+        >
+          <Plus className="w-4 h-4" /> Позиция
+        </button>
       </div>
 
       <div className="card mt-4 p-5 space-y-3 text-sm">
@@ -168,35 +227,55 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
         </div>
       </section>
 
-      <div className="card mt-6 p-5 space-y-3">
-        <div>
-          <div className="font-medium mb-1">Создать комнату</div>
-          <p className="text-sm text-mute">Друзья подключатся по коду и выберут что ели.</p>
-        </div>
-        <input
-          className="input w-full"
-          placeholder="Название (например, «Вечер четверга в Saperavi»)"
-          value={roomName}
-          maxLength={60}
-          onChange={(e) => setRoomName(e.target.value)}
-        />
-        <div className="flex gap-2">
-          <input
-            className="input w-full"
-            placeholder="Твоё имя"
-            value={hostName}
-            onChange={(e) => setHostName(e.target.value)}
-          />
+      {editMode ? (
+        <div className="mt-6 flex gap-2 justify-end">
           <button
-            onClick={createRoom}
-            disabled={!hostName.trim() || !roomName.trim() || creating}
+            onClick={() => router.replace(`/room/${roomCode}`)}
+            className="btn btn-ghost"
+            disabled={saving}
+          >
+            Отмена
+          </button>
+          <button
+            onClick={saveToRoom}
+            disabled={saving}
             className="btn btn-primary whitespace-nowrap"
           >
-            {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
-            Создать
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            Сохранить
           </button>
         </div>
-      </div>
+      ) : (
+        <div className="card mt-6 p-5 space-y-3">
+          <div>
+            <div className="font-medium mb-1">Создать комнату</div>
+            <p className="text-sm text-mute">Друзья подключатся по коду и выберут что ели.</p>
+          </div>
+          <input
+            className="input w-full"
+            placeholder="Название (например, «Вечер четверга в Saperavi»)"
+            value={roomName}
+            maxLength={60}
+            onChange={(e) => setRoomName(e.target.value)}
+          />
+          <div className="flex gap-2">
+            <input
+              className="input w-full"
+              placeholder="Твоё имя"
+              value={hostName}
+              onChange={(e) => setHostName(e.target.value)}
+            />
+            <button
+              onClick={createRoom}
+              disabled={!hostName.trim() || !roomName.trim() || creating}
+              className="btn btn-primary whitespace-nowrap"
+            >
+              {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+              Создать
+            </button>
+          </div>
+        </div>
+      )}
 
       <section className="mt-6">
         <div className="text-sm text-mute mb-2 px-1">Справка</div>

@@ -1,8 +1,8 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Check, Copy, Home, LogOut, Minus, Plus, Users } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Copy, Home, LogOut, Minus, Pencil, Plus, Users, X } from "lucide-react";
 import type { Participant, Receipt, Room } from "@/lib/domain/types";
 import {
   claimedUnits,
@@ -281,16 +281,27 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
         </div>
         <div className="flex flex-col items-end gap-1.5">
           <ParticipantsStrip participants={room.participants} meId={me.id} />
-          <button
-            onClick={signOut}
-            className="text-xs text-mute hover:text-ink transition flex items-center gap-1"
-            title={`Выйти из роли «${me.name}»`}
-          >
-            <LogOut className="w-3 h-3" />
-            Выйти
-          </button>
+          <div className="flex items-center gap-3">
+            <Link
+              href={`/edit/${receipt.id}?room=${code}`}
+              className="text-xs text-accent hover:text-accent/80 transition flex items-center gap-1"
+              title="Внести правки в чек"
+            >
+              <Pencil className="w-3 h-3" />
+              Внести правки
+            </Link>
+            <button
+              onClick={signOut}
+              className="text-xs text-mute hover:text-ink transition flex items-center gap-1"
+              title={`Выйти из роли «${me.name}»`}
+            >
+              <LogOut className="w-3 h-3" />
+              Выйти
+            </button>
+          </div>
         </div>
       </div>
+
 
       <ProgressStrip receipt={receipt} room={room} totals={totals} />
 
@@ -389,16 +400,7 @@ function ItemCard({
     a.p.id === me.id ? -1 : b.p.id === me.id ? 1 : 0,
   );
 
-  const [focused, setFocused] = useState(false);
-  const maxFraction = Math.max(10, room.participants.length);
-  const q = item.quantity;
-  const fractions: { n: number; label: string; value: number }[] = [];
-  for (let n = 2; n <= maxFraction; n++) {
-    if (n === q) continue;
-    const value = Math.round((q / n) * 100) / 100;
-    const label = `${fmtUnitsShort(q)}/${n}`;
-    fractions.push({ n, label, value });
-  }
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   return (
     <div
@@ -454,32 +456,10 @@ function ItemCard({
           </div>
         </div>
 
-        <UnitsStepper value={myUnits} onChange={onSet} onFocusChange={setFocused} />
+        <UnitsStepper value={myUnits} onChange={onSet} onOpenPicker={() => setPickerOpen(true)} />
       </div>
 
-      {focused && fractions.length > 0 ? (
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {fractions.map(({ n, label, value }) => {
-            const active = Math.abs(myUnits - value) < 1e-9;
-            return (
-              <button
-                key={n}
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => onSet(value)}
-                className={cn(
-                  "inline-flex items-center justify-center min-w-9 h-7 px-2 rounded-full text-base leading-none border whitespace-nowrap transition",
-                  active
-                    ? "bg-accent/20 border-accent/40 text-ink"
-                    : "bg-white/[0.04] border-white/10 text-mute hover:bg-white/[0.08]",
-                )}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      ) : allEaters.length > 0 ? (
+      {allEaters.length > 0 ? (
         <div className="mt-2 flex flex-wrap gap-1.5">
               {allEaters.map(({ p, units }) => {
                 const isMe = p.id === me.id;
@@ -514,6 +494,19 @@ function ItemCard({
           разобрано {fmtUnitsShort(claimed)} — больше чем в чеке ({fmtUnitsShort(item.quantity)})
         </div>
       )}
+
+      {pickerOpen && (
+        <UnitsPickerDialog
+          item={item}
+          participantsCount={room.participants.length}
+          value={myUnits}
+          onClose={() => setPickerOpen(false)}
+          onCommit={(v) => {
+            onSet(v);
+            setPickerOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -521,42 +514,18 @@ function ItemCard({
 function UnitsStepper({
   value,
   onChange,
-  onFocusChange,
+  onOpenPicker,
 }: {
   value: number;
   onChange: (units: number) => void;
-  onFocusChange?: (focused: boolean) => void;
+  onOpenPicker: () => void;
 }) {
-  const [text, setText] = useState(fmtUnits(value));
-  const [focused, setFocused] = useState(false);
-
-  useEffect(() => {
-    setText(fmtUnits(value));
-  }, [value]);
-
-  useEffect(() => {
-    onFocusChange?.(focused);
-  }, [focused, onFocusChange]);
-
-  const commit = () => {
-    const n = parseFloat(text.replace(",", "."));
-    if (Number.isFinite(n) && n >= 0) {
-      if (Math.abs(n - value) > 1e-9) onChange(n);
-      else setText(fmtUnits(value));
-    } else {
-      setText(fmtUnits(value));
-    }
-  };
-
   const active = value > 0;
-
   return (
     <div
       className={cn(
         "flex items-center gap-0.5 rounded-full border p-1 shrink-0 transition",
-        active
-          ? "border-accent/60 bg-accent/15"
-          : "border-white/10 bg-white/[0.04]",
+        active ? "border-accent/60 bg-accent/15" : "border-white/10 bg-white/[0.04]",
       )}
     >
       <button
@@ -568,46 +537,19 @@ function UnitsStepper({
       >
         <Minus className="w-4 h-4" strokeWidth={2.5} />
       </button>
-      <div className="relative">
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onFocus={(e) => {
-            setFocused(true);
-            e.currentTarget.select();
-          }}
-          onBlur={() => {
-            setFocused(false);
-            commit();
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              (e.currentTarget as HTMLInputElement).blur();
-            }
-            if (e.key === "Escape") {
-              setText(fmtUnits(value));
-              (e.currentTarget as HTMLInputElement).blur();
-            }
-          }}
-          inputMode="decimal"
-          title="Можно ввести точное значение"
-          autoComplete="off"
-          autoCorrect="off"
-          autoCapitalize="off"
-          spellCheck={false}
-          name="units"
-          data-1p-ignore
-          data-lpignore="true"
-          data-form-type="other"
-          className="peer w-12 h-8 text-center font-semibold text-sm tabular-nums bg-transparent outline-none rounded cursor-text text-ink"
-          aria-label="Сколько съел — можно ввести точное значение"
-        />
+      <button
+        type="button"
+        onClick={onOpenPicker}
+        className="relative w-10 h-8 grid place-items-center font-semibold text-xs tabular-nums text-ink rounded transition active:bg-white/15 hover:bg-white/10"
+        aria-label="Выбрать количество"
+        title={`Выбрать долю — ${fmtUnits(value)}`}
+      >
+        {fmtUnitsCompact(value)}
         <span
           aria-hidden
-          className="pointer-events-none absolute left-1 right-1 bottom-0.5 h-px text-mute [background-image:repeating-linear-gradient(to_right,currentColor_0,currentColor_2px,transparent_2px,transparent_4px)]"
+          className="pointer-events-none absolute left-1.5 right-1.5 bottom-0.5 h-px text-mute [background-image:repeating-linear-gradient(to_right,currentColor_0,currentColor_2px,transparent_2px,transparent_4px)]"
         />
-      </div>
+      </button>
       <button
         type="button"
         onClick={() => onChange(value + 1)}
@@ -620,9 +562,306 @@ function UnitsStepper({
   );
 }
 
+function UnitsPickerDialog({
+  item,
+  participantsCount,
+  value,
+  onClose,
+  onCommit,
+}: {
+  item: { quantity: number; name: string };
+  participantsCount: number;
+  value: number;
+  onClose: () => void;
+  onCommit: (v: number) => void;
+}) {
+  const maxPortions = Math.max(Math.ceil(item.quantity), 1);
+  const maxPeople = 50;
+  const portionOptions = Array.from({ length: maxPortions }, (_, i) => i + 1);
+  const peopleOptions = Array.from({ length: maxPeople - 1 }, (_, i) => i + 2);
+
+  const initialState = (() => {
+    const f = detectFraction(value, maxPortions, maxPeople);
+    if (f) return { portions: f.portions, people: f.people as number | null, custom: null as number | null };
+    if (value > 0) return { portions: 1, people: null as number | null, custom: value };
+    return { portions: 1, people: 2 as number | null, custom: null as number | null };
+  })();
+  const [portions, setPortionsRaw] = useState(initialState.portions);
+  const [people, setPeopleRaw] = useState<number | null>(initialState.people);
+  const [customValue, setCustomValue] = useState<number | null>(initialState.custom);
+  const [customOpen, setCustomOpen] = useState(false);
+
+  const setPortions = (n: number) => {
+    setCustomValue(null);
+    setPortionsRaw(n);
+    if (people === null) setPeopleRaw(2);
+  };
+  const setPeople = (n: number) => {
+    setCustomValue(null);
+    setPeopleRaw(n);
+  };
+
+  const result =
+    customValue !== null
+      ? customValue
+      : people !== null
+      ? Math.round((portions / people) * 1000) / 1000
+      : portions;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  if (customOpen) {
+    return (
+      <CustomValueDialog
+        initial={customValue ?? value}
+        onBack={() => setCustomOpen(false)}
+        onClose={onClose}
+        onApply={(v) => onCommit(v)}
+      />
+    );
+  }
+
+  return (
+    <DialogShell onClose={onClose} title={item.name}>
+      <div className="space-y-5">
+        <div>
+          <div className="text-xs text-mute mb-2">Количество порций</div>
+          <Carousel
+            options={portionOptions}
+            value={portions}
+            onChange={setPortions}
+            renderLabel={(n) => String(n)}
+          />
+        </div>
+        <div>
+          <div className="text-xs text-mute mb-2 px-1">На количество человек</div>
+          <Carousel
+            options={peopleOptions}
+            value={people}
+            onChange={setPeople}
+            renderLabel={(n) => String(n)}
+          />
+        </div>
+
+        <div className="flex items-baseline justify-between pt-1">
+          <button
+            type="button"
+            onClick={() => setCustomOpen(true)}
+            className="text-xs text-accent hover:underline"
+          >
+            Ввести вручную
+          </button>
+          <div className="text-sm tabular-nums text-mute">
+            {customValue !== null ? (
+              <span className="text-ink font-semibold">{fmtUnitsShort(customValue)}</span>
+            ) : (
+              <>=&nbsp;<span className="text-ink font-semibold">{fmtUnitsShort(result)}</span></>
+            )}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onCommit(result)}
+          className="btn btn-primary w-full"
+        >
+          ОК
+        </button>
+      </div>
+    </DialogShell>
+  );
+}
+
+function CustomValueDialog({
+  initial,
+  onBack,
+  onClose,
+  onApply,
+}: {
+  initial: number;
+  onBack: () => void;
+  onClose: () => void;
+  onApply: (v: number) => void;
+}) {
+  const [text, setText] = useState(initial > 0 ? fmtUnits(initial) : "");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  const parsed = parseFloat(text.replace(",", "."));
+  const valid = Number.isFinite(parsed) && parsed >= 0;
+
+  return (
+    <DialogShell onClose={onClose} onBack={onBack} title="Ввести вручную">
+      <div className="space-y-4">
+        <div className="text-xs text-mute">
+          Сколько порций ты съел. Дробное — твоя доля от одной порции (например, <span className="text-ink">0.5</span> — половина, <span className="text-ink">1.5</span> — полторы).
+        </div>
+        <input
+          ref={inputRef}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && valid) onApply(parsed);
+          }}
+          inputMode="decimal"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          name="units"
+          data-1p-ignore
+          data-lpignore="true"
+          data-form-type="other"
+          placeholder="например, 0.33"
+          className="input w-full text-center text-2xl font-semibold tabular-nums h-14"
+        />
+        <button
+          type="button"
+          onClick={() => valid && onApply(parsed)}
+          disabled={!valid}
+          className="btn btn-primary w-full"
+        >
+          ОК
+        </button>
+      </div>
+    </DialogShell>
+  );
+}
+
+function DialogShell({
+  title,
+  subtitle,
+  onClose,
+  onBack,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  onClose: () => void;
+  onBack?: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm card p-5 relative shadow-glow"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-2 mb-4">
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="p-1 -ml-1 text-mute hover:text-ink transition shrink-0"
+              aria-label="Назад"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="font-medium">{title}</div>
+            {subtitle && <div className="text-xs text-mute truncate">{subtitle}</div>}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 -mr-1 -mt-1 text-mute hover:text-ink transition shrink-0"
+            aria-label="Закрыть"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Carousel({
+  options,
+  value,
+  onChange,
+  renderLabel,
+}: {
+  options: number[];
+  value: number | null;
+  onChange: (v: number) => void;
+  renderLabel: (v: number) => string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const activeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }, [value]);
+
+  return (
+    <div className="relative -mx-5">
+      <div
+        ref={ref}
+        className="flex gap-1.5 overflow-x-auto snap-x snap-mandatory py-1 px-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-16px),transparent)]"
+      >
+        {options.map((n) => {
+          const active = n === value;
+          return (
+            <button
+              key={n}
+              ref={active ? activeRef : null}
+              type="button"
+              onClick={() => onChange(n)}
+              className={cn(
+                "snap-center shrink-0 w-12 h-12 rounded-xl grid place-items-center font-semibold tabular-nums border transition",
+                active
+                  ? "bg-accent text-bg border-accent shadow-glow"
+                  : "bg-white/[0.04] border-white/10 text-mute hover:bg-white/[0.08]",
+              )}
+            >
+              {renderLabel(n)}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function detectFraction(value: number, maxPortions: number, maxPeople: number): { portions: number; people: number } | null {
+  if (value <= 0) return null;
+  if (Number.isInteger(value) && value <= maxPortions) return { portions: value, people: 1 };
+  for (let portions = 1; portions <= Math.min(maxPortions, 5); portions++) {
+    for (let people = 2; people <= maxPeople; people++) {
+      if (Math.abs(portions / people - value) < 1e-3) return { portions, people };
+    }
+  }
+  return null;
+}
+
 function fmtUnits(n: number) {
   if (Math.abs(n) < 1e-9) return "0";
   return String(n);
+}
+
+function fmtUnitsCompact(n: number): string {
+  if (Math.abs(n) < 1e-9) return "0";
+  if (Number.isInteger(n)) {
+    const s = String(n);
+    return s.length <= 4 ? s : "999+";
+  }
+  if (n < 10) return n.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+  return String(Math.round(n));
 }
 
 function fmtUnitsShort(n: number) {

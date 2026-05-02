@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { nanoid } from "nanoid";
 import { z } from "zod";
 import { receipts, rooms } from "@/lib/store";
 import { bus, roomChannel } from "@/lib/events";
@@ -10,9 +11,17 @@ const ItemSchema = z.object({
   unitPrice: z.number().nonnegative().optional(),
 });
 
+const FullItemSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(1),
+  quantity: z.number().positive(),
+  unitPrice: z.number().nonnegative(),
+});
+
 const PatchSchema = z.object({
   upsertItem: ItemSchema.optional(),
   removeItemId: z.string().optional(),
+  items: z.array(FullItemSchema).optional(),
   serviceCharge: z.number().nonnegative().optional(),
   tax: z.number().nonnegative().optional(),
   total: z.number().nonnegative().optional(),
@@ -34,6 +43,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   let updated = receipts.get(id);
   if (!updated) return NextResponse.json({ error: "not found" }, { status: 404 });
 
+  if (body.items) {
+    const normalized = body.items.map((i) => ({
+      id: i.id ?? nanoid(8),
+      name: i.name,
+      quantity: i.quantity,
+      unitPrice: i.unitPrice,
+    }));
+    updated = receipts.replaceItems(id, normalized);
+  }
   if (body.upsertItem) updated = receipts.upsertItem(id, body.upsertItem);
   if (body.removeItemId) updated = receipts.removeItem(id, body.removeItemId);
   if (
@@ -50,6 +68,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       ...(body.currency !== undefined && { currency: body.currency }),
       ...(body.comment !== undefined && { comment: body.comment }),
     });
+  }
+
+  if (!updated) return NextResponse.json({ error: "not found" }, { status: 404 });
+
+  const validIds = new Set(updated.items.map((i) => i.id));
+  const affected = rooms.cleanOrphanSelections(id, validIds);
+  for (const room of affected) {
+    bus.publish(roomChannel(room.code), { type: "room", room });
   }
 
   for (const room of rooms.findByReceipt(id)) {
