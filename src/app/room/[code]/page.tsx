@@ -389,6 +389,13 @@ function ItemCard({
     a.p.id === me.id ? -1 : b.p.id === me.id ? 1 : 0,
   );
 
+  const [focused, setFocused] = useState(false);
+  const maxFraction = Math.max(room.participants.length, 4);
+  const fractions: { n: number; label: string }[] = [];
+  for (let n = 2; n <= maxFraction; n++) {
+    fractions.push({ n, label: fractionLabel(n) });
+  }
+
   return (
     <div
       className={cn(
@@ -443,10 +450,34 @@ function ItemCard({
           </div>
         </div>
 
-        <UnitsStepper value={myUnits} onChange={onSet} />
+        <UnitsStepper value={myUnits} onChange={onSet} onFocusChange={setFocused} />
       </div>
 
-      {allEaters.length > 0 && (
+      {focused && fractions.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {fractions.map(({ n, label }) => {
+            const v = Math.round((item.quantity / n) * 100) / 100;
+            const active = Math.abs(myUnits - v) < 1e-9;
+            return (
+              <button
+                key={n}
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => onSet(v)}
+                className={cn(
+                  "inline-flex items-center justify-center w-9 h-7 rounded-full text-base leading-none border whitespace-nowrap transition",
+                  active
+                    ? "bg-accent/20 border-accent/40 text-ink"
+                    : "bg-white/[0.04] border-white/10 text-mute hover:bg-white/[0.08]",
+                )}
+                title={`${label} от ${fmtUnits(item.quantity)} = ${fmtUnitsShort(v)}`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      ) : allEaters.length > 0 ? (
         <div className="mt-2 flex flex-wrap gap-1.5">
               {allEaters.map(({ p, units }) => {
                 const isMe = p.id === me.id;
@@ -473,7 +504,7 @@ function ItemCard({
                 );
               })}
         </div>
-      )}
+      ) : null}
 
       {showStatus && (
         <div className="mt-3 text-xs flex items-center gap-1.5 text-danger">
@@ -488,16 +519,22 @@ function ItemCard({
 function UnitsStepper({
   value,
   onChange,
+  onFocusChange,
 }: {
   value: number;
   onChange: (units: number) => void;
+  onFocusChange?: (focused: boolean) => void;
 }) {
   const [text, setText] = useState(fmtUnits(value));
   const [focused, setFocused] = useState(false);
 
   useEffect(() => {
-    if (!focused) setText(fmtUnits(value));
-  }, [value, focused]);
+    setText(fmtUnits(value));
+  }, [value]);
+
+  useEffect(() => {
+    onFocusChange?.(focused);
+  }, [focused, onFocusChange]);
 
   const commit = () => {
     const n = parseFloat(text.replace(",", "."));
@@ -571,6 +608,22 @@ function UnitsStepper({
       </button>
     </div>
   );
+}
+
+const FRACTION_GLYPHS: Record<number, string> = {
+  2: "½",
+  3: "⅓",
+  4: "¼",
+  5: "⅕",
+  6: "⅙",
+  7: "⅐",
+  8: "⅛",
+  9: "⅑",
+  10: "⅒",
+};
+
+function fractionLabel(n: number) {
+  return FRACTION_GLYPHS[n] ?? `1/${n}`;
 }
 
 function fmtUnits(n: number) {
