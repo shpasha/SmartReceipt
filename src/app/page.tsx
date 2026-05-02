@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, Sparkles, Upload, Users } from "lucide-react";
+import { ArrowRight, Camera, Sparkles, Upload, Users } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 
 export default function Home() {
@@ -11,6 +11,12 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [code, setCode] = useState("");
+
+  const codeValid = /^[A-Z2-9]{5}$/.test(code);
+  function joinByCode() {
+    if (codeValid) router.push(`/room/${code}`);
+  }
 
   async function handleFile(file: File) {
     setError(null);
@@ -32,7 +38,7 @@ export default function Home() {
     <main className="mx-auto max-w-3xl px-5 pt-16 pb-24">
       <header className="text-center mb-10">
         <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight bg-gradient-to-br from-white via-white to-white/60 bg-clip-text text-transparent">
-          Раздели счёт <span className="bg-gradient-to-r from-accent to-accent2 bg-clip-text text-transparent">по-умному</span>
+          Раздели счёт <span className="whitespace-nowrap bg-gradient-to-r from-accent to-accent2 bg-clip-text text-transparent">по-умному</span>
         </h1>
         <p className="text-mute mt-4 max-w-lg mx-auto">
           Загрузи чек из ресторана — мы распознаем позиции. Создай комнату, друзья выберут что ели — и каждый увидит свою долю.
@@ -99,10 +105,47 @@ export default function Home() {
         <div className="mt-4 text-danger text-sm text-center">{error}</div>
       )}
 
+      <div className="mt-6 flex items-center gap-3 text-mute text-xs">
+        <div className="h-px bg-white/10 flex-1" />
+        <span>уже есть код?</span>
+        <div className="h-px bg-white/10 flex-1" />
+      </div>
+
+      <div className="mt-4 flex gap-2 justify-center">
+        <input
+          className="input w-44 text-center tracking-[0.4em] font-mono uppercase"
+          placeholder="ABCDE"
+          value={code}
+          maxLength={5}
+          inputMode="text"
+          autoCapitalize="characters"
+          autoCorrect="off"
+          spellCheck={false}
+          onChange={(e) => {
+            const v = e.target.value
+              .toUpperCase()
+              .replace(/[^A-Z2-9]/g, "")
+              .slice(0, 5);
+            setCode(v);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") joinByCode();
+          }}
+        />
+        <button
+          onClick={joinByCode}
+          disabled={!codeValid}
+          className="btn btn-ghost"
+        >
+          Войти
+          <ArrowRight className="w-4 h-4" />
+        </button>
+      </div>
+
       <section className="mt-14 grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Step n={1} icon={<Camera className="w-5 h-5" />} title="Отсканируй чек" text="Сфоткай — позиции и цены распознаются автоматически." />
-        <Step n={2} icon={<Users className="w-5 h-5" />} title="Отправь ссылку друзьям" text="Создаёшь комнату и делишься кодом — все подключаются мгновенно." />
-        <Step n={3} icon={<Sparkles className="w-5 h-5" />} title="Выберите кто что ел" text="Каждый отмечает свои позиции — итог считается сам." />
+        <Step n={1} icon={<Camera className="w-5 h-5" />} title="Загрузи фото чека" text="Распознаем позиции и цены за тебя." />
+        <Step n={2} icon={<Users className="w-5 h-5" />} title="Позови друзей" text="Отправь код — каждый зайдёт со своего телефона." />
+        <Step n={3} icon={<Sparkles className="w-5 h-5" />} title="Отметьте, кто что ел" text="Каждый выбирает своё — сумму посчитаем сами." />
       </section>
     </main>
   );

@@ -17,6 +17,7 @@ const PatchSchema = z.object({
   tax: z.number().nonnegative().optional(),
   total: z.number().nonnegative().optional(),
   currency: z.string().optional(),
+  comment: z.string().max(500).optional(),
 });
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -39,13 +40,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     body.serviceCharge !== undefined ||
     body.tax !== undefined ||
     body.total !== undefined ||
-    body.currency !== undefined
+    body.currency !== undefined ||
+    body.comment !== undefined
   ) {
     updated = receipts.update(id, {
       ...(body.serviceCharge !== undefined && { serviceCharge: body.serviceCharge }),
       ...(body.tax !== undefined && { tax: body.tax }),
       ...(body.total !== undefined && { total: body.total }),
       ...(body.currency !== undefined && { currency: body.currency }),
+      ...(body.comment !== undefined && { comment: body.comment }),
     });
   }
 

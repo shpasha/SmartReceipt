@@ -122,7 +122,7 @@ export const rooms = {
     const current = room.selections
       .filter((s) => s.itemId === itemId && s.participantId === participantId)
       .reduce((a, b) => a + b.units, 0);
-    const next = Math.max(0, Math.round((current + delta) * 100) / 100);
+    const next = Math.max(0, current + delta);
     return this.setSelection(code, { itemId, participantId, units: next });
   },
 

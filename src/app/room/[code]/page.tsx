@@ -4,7 +4,15 @@ import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, Check, Copy, Home, LogOut, Minus, Plus, Users } from "lucide-react";
 import type { Participant, Receipt, Room } from "@/lib/domain/types";
-import { claimedUnits, computeTotals, itemTotal, userUnits } from "@/lib/domain/totals";
+import {
+  claimedUnits,
+  computeTotals,
+  itemStatus,
+  itemTotal,
+  receiptSubtotal,
+  userUnits,
+  DRIFT_TOLERANCE,
+} from "@/lib/domain/totals";
 import { formatMoney, cn, participantColor } from "@/lib/utils";
 import { apiUrl } from "@/lib/api";
 
@@ -149,13 +157,17 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
     });
   }
 
+
   const totals = useMemo(() => (receipt && room ? computeTotals(receipt, room) : []), [receipt, room]);
 
   if (notFound) {
     return (
       <main className="mx-auto max-w-md px-5 pt-24 text-center">
         <h1 className="text-xl font-medium mb-2">Комната не найдена</h1>
-        <p className="text-mute text-sm">Проверь код и попробуй ещё раз.</p>
+        <p className="text-mute text-sm mb-6">Проверь код и попробуй ещё раз.</p>
+        <Link href="/" className="btn btn-ghost">
+          <Home className="w-4 h-4" /> На главную
+        </Link>
       </main>
     );
   }
@@ -233,7 +245,7 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
         )}
 
         <div className="mt-6 flex justify-center">
-          <Link href="/" className="text-sm text-mute hover:text-ink transition flex items-center gap-1.5">
+          <Link href="/" className="btn btn-ghost">
             <Home className="w-4 h-4" /> На главную
           </Link>
         </div>
@@ -281,6 +293,8 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
         </div>
       </div>
 
+      <ProgressStrip receipt={receipt} room={room} totals={totals} />
+
       <div className="card divide-y divide-white/5 overflow-hidden">
         {receipt.items.map((item) => (
           <ItemCard
@@ -325,7 +339,16 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
         </div>
       </section>
 
-      <div className="mt-8 flex justify-center">
+      {receipt.comment && (
+        <section className="mt-6">
+          <div className="text-sm text-mute mb-2 px-1">Комментарий</div>
+          <div className="card p-4 text-sm whitespace-pre-wrap leading-relaxed break-words">
+            {receipt.comment}
+          </div>
+        </section>
+      )}
+
+      <div className="mt-6 flex justify-center">
         <Link href="/" className="btn btn-ghost">
           <Home className="w-4 h-4" /> На главную
         </Link>
@@ -333,6 +356,7 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
     </main>
   );
 }
+
 
 function ItemCard({
   item,
@@ -349,8 +373,9 @@ function ItemCard({
 }) {
   const myUnits = userUnits(room, item.id, me.id);
   const claimed = claimedUnits(room, item.id);
-  const remaining = Math.max(0, item.quantity - claimed);
-  const overclaimed = claimed > item.quantity + 0.02;
+  const status = itemStatus(item, claimed);
+  const overclaimed = status === "over";
+  const fullyClaimed = status === "full";
 
   const eaters = room.selections
     .filter((s) => s.itemId === item.id && s.units > 0)
@@ -360,8 +385,7 @@ function ItemCard({
     }))
     .filter((e) => e.p);
 
-  const fullyClaimed = claimed > 0 && Math.abs(claimed - item.quantity) < 0.02;
-  const showStatus = claimed > 0 && !fullyClaimed && (overclaimed || remaining > 0);
+  const showStatus = overclaimed;
   const allEaters = [...eaters].sort((a, b) =>
     a.p.id === me.id ? -1 : b.p.id === me.id ? 1 : 0,
   );
@@ -444,7 +468,7 @@ function ItemCard({
                     <span className="inline-flex items-center gap-0.5">
                       <span>{p.name}</span>
                       <span className="opacity-60">·</span>
-                      <span className="tabular-nums">{fmtUnits(units)}</span>
+                      <span className="tabular-nums">{fmtUnitsShort(units)}</span>
                     </span>
                   </span>
                 );
@@ -453,21 +477,9 @@ function ItemCard({
       )}
 
       {showStatus && (
-        <div
-          className={cn(
-            "mt-3 text-xs flex items-center gap-1.5",
-            overclaimed ? "text-danger" : "text-mute",
-          )}
-        >
-          <span
-            className={cn(
-              "w-1.5 h-1.5 rounded-full",
-              overclaimed ? "bg-danger" : "bg-mute",
-            )}
-          />
-          {overclaimed
-            ? `разобрано ${fmtUnits(claimed)} — больше чем в чеке (${fmtUnits(item.quantity)})`
-            : `осталось разобрать ${fmtUnits(remaining)} из ${fmtUnits(item.quantity)}`}
+        <div className="mt-3 text-xs flex items-center gap-1.5 text-danger">
+          <span className="w-1.5 h-1.5 rounded-full bg-danger" />
+          разобрано {fmtUnitsShort(claimed)} — больше чем в чеке ({fmtUnitsShort(item.quantity)})
         </div>
       )}
     </div>
@@ -488,13 +500,10 @@ function UnitsStepper({
     if (!focused) setText(fmtUnits(value));
   }, [value, focused]);
 
-  const round2 = (n: number) => Math.round(n * 100) / 100;
-
   const commit = () => {
     const n = parseFloat(text.replace(",", "."));
     if (Number.isFinite(n) && n >= 0) {
-      const r = round2(n);
-      if (Math.abs(r - value) > 1e-9) onChange(r);
+      if (Math.abs(n - value) > 1e-9) onChange(n);
       else setText(fmtUnits(value));
     } else {
       setText(fmtUnits(value));
@@ -514,7 +523,7 @@ function UnitsStepper({
     >
       <button
         type="button"
-        onClick={() => onChange(Math.max(0, round2(value - 1)))}
+        onClick={() => onChange(Math.max(0, value - 1))}
         disabled={value === 0}
         className="w-8 h-8 rounded-full grid place-items-center transition disabled:opacity-30 hover:bg-white/10"
         aria-label="Меньше"
@@ -545,17 +554,18 @@ function UnitsStepper({
           }}
           inputMode="decimal"
           title="Можно ввести точное значение"
-          className="peer w-10 h-8 text-center font-semibold text-sm tabular-nums bg-transparent outline-none rounded cursor-text text-ink"
+          size={4}
+          className="peer h-8 px-1 text-center font-semibold text-sm tabular-nums bg-transparent outline-none rounded cursor-text text-ink box-content"
           aria-label="Сколько съел — можно ввести точное значение"
         />
         <span
           aria-hidden
-          className="pointer-events-none absolute left-1.5 right-1.5 bottom-0.5 h-px text-mute [background-image:repeating-linear-gradient(to_right,currentColor_0,currentColor_2px,transparent_2px,transparent_4px)]"
+          className="pointer-events-none absolute left-1 right-1 bottom-0.5 h-px text-mute [background-image:repeating-linear-gradient(to_right,currentColor_0,currentColor_2px,transparent_2px,transparent_4px)]"
         />
       </div>
       <button
         type="button"
-        onClick={() => onChange(round2(value + 1))}
+        onClick={() => onChange(value + 1)}
         className="w-8 h-8 rounded-full grid place-items-center transition hover:bg-white/10"
         aria-label="Больше"
       >
@@ -566,6 +576,11 @@ function UnitsStepper({
 }
 
 function fmtUnits(n: number) {
+  if (Math.abs(n) < 1e-9) return "0";
+  return String(n);
+}
+
+function fmtUnitsShort(n: number) {
   if (Math.abs(n) < 1e-9) return "0";
   if (Number.isInteger(n)) return String(n);
   return n.toFixed(2).replace(/\.?0+$/, "");
@@ -599,6 +614,49 @@ function ParticipantsStrip({ participants, meId }: { participants: Participant[]
           +{rest.length}
         </div>
       )}
+    </div>
+  );
+}
+
+function ProgressStrip({
+  receipt,
+  room,
+  totals,
+}: {
+  receipt: Receipt;
+  room: Room;
+  totals: ReturnType<typeof computeTotals>;
+}) {
+  const receiptTotal = receiptSubtotal(receipt) + receipt.serviceCharge + receipt.tax;
+  const claimedTotal = totals.reduce((s, t) => s + t.total, 0);
+  const remaining = receiptTotal - claimedTotal;
+  const drift = receiptTotal > 0 ? Math.abs(remaining) / receiptTotal : 0;
+  const done = claimedTotal > 0 && drift <= DRIFT_TOLERANCE;
+  const pct = done ? 1 : receiptTotal > 0 ? Math.min(1, claimedTotal / receiptTotal) : 0;
+
+  return (
+    <div className="card p-4 mb-4">
+      <div className="flex items-baseline justify-between text-sm mb-2">
+        <div className="text-mute">
+          Разобрано{" "}
+          <span className={cn("tabular-nums font-medium", done ? "text-success" : "text-ink")}>
+            {formatMoney(claimedTotal, receipt.currency)}
+          </span>
+          <span className="text-mute"> / {formatMoney(receiptTotal, receipt.currency)}</span>
+        </div>
+        {!done && room.selections.length > 0 && (
+          <div className="text-xs text-mute tabular-nums">
+            {remaining > 0 ? "осталось " : "перебор "}
+            {formatMoney(Math.abs(remaining), receipt.currency)}
+          </div>
+        )}
+      </div>
+      <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+        <div
+          className={cn("h-full transition-all", done ? "bg-success" : "bg-accent")}
+          style={{ width: `${pct * 100}%` }}
+        />
+      </div>
     </div>
   );
 }

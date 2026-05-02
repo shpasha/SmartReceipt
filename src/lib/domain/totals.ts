@@ -1,5 +1,17 @@
 import type { Receipt, Room, ParticipantTotal, ReceiptItem } from "./types";
 
+export const DRIFT_TOLERANCE = 0.005;
+
+export function itemStatus(item: ReceiptItem, claimed: number) {
+  if (claimed <= 0) return "empty" as const;
+  const target = item.quantity;
+  if (target <= 0) return claimed > 0 ? "over" : "empty";
+  const drift = Math.abs(claimed - target) / target;
+  if (claimed > target && drift > DRIFT_TOLERANCE) return "over" as const;
+  if (drift <= DRIFT_TOLERANCE) return "full" as const;
+  return "partial" as const;
+}
+
 export function itemTotal(item: { quantity: number; unitPrice: number }) {
   return item.quantity * item.unitPrice;
 }
@@ -27,9 +39,6 @@ export function itemEaters(room: Room, item: ReceiptItem) {
 }
 
 export function computeTotals(receipt: Receipt, room: Room): ParticipantTotal[] {
-  const subtotal = receiptSubtotal(receipt);
-  const extras = receipt.serviceCharge + receipt.tax;
-
   const subtotalByParticipant = new Map<string, number>();
   for (const item of receipt.items) {
     for (const sel of room.selections) {
@@ -43,11 +52,16 @@ export function computeTotals(receipt: Receipt, room: Room): ParticipantTotal[] 
   }
 
   const claimedSubtotal = [...subtotalByParticipant.values()].reduce((a, b) => a + b, 0);
+  const claimers = subtotalByParticipant.size;
+  const tipPerHead = claimers > 0 ? receipt.serviceCharge / claimers : 0;
 
   return room.participants.map((p) => {
     const sub = subtotalByParticipant.get(p.id) ?? 0;
+    const eats = sub > 0;
     const ratio = claimedSubtotal > 0 ? sub / claimedSubtotal : 0;
-    const share = extras * ratio + (subtotal - claimedSubtotal) * 0;
+    const taxShare = receipt.tax * ratio;
+    const tipShare = eats ? tipPerHead : 0;
+    const share = taxShare + tipShare;
     return {
       participant: p,
       subtotal: round2(sub),

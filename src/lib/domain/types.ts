@@ -15,6 +15,7 @@ export interface Receipt {
   serviceCharge: number;
   tax: number;
   total: number;
+  comment?: string;
   imagePath?: string;
   imageMime?: string;
   rawText?: string;
