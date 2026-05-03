@@ -1,6 +1,7 @@
 import type { Receipt, Room, ParticipantTotal, ReceiptItem } from "./types";
 
 export const DRIFT_TOLERANCE = 0.005;
+export const SERVICE_ITEM_ID = "__service__";
 
 export function itemStatus(item: ReceiptItem, claimed: number) {
   if (claimed <= 0) return "empty" as const;
@@ -52,19 +53,36 @@ export function computeTotals(receipt: Receipt, room: Room): ParticipantTotal[] 
   }
 
   const claimedSubtotal = [...subtotalByParticipant.values()].reduce((a, b) => a + b, 0);
-  const claimers = subtotalByParticipant.size;
-  const tipPerHead = claimers > 0 ? receipt.serviceCharge / claimers : 0;
+
+  const serviceUnitsByParticipant = new Map<string, number>();
+  for (const sel of room.selections) {
+    if (sel.itemId !== SERVICE_ITEM_ID || sel.units <= 0) continue;
+    serviceUnitsByParticipant.set(
+      sel.participantId,
+      (serviceUnitsByParticipant.get(sel.participantId) ?? 0) + sel.units,
+    );
+  }
+  const serviceClaimed = [...serviceUnitsByParticipant.values()].reduce((a, b) => a + b, 0);
+  const fallbackClaimers = subtotalByParticipant.size;
+  const fallbackTipPerHead = fallbackClaimers > 0 ? receipt.serviceCharge / fallbackClaimers : 0;
 
   return room.participants.map((p) => {
     const sub = subtotalByParticipant.get(p.id) ?? 0;
     const eats = sub > 0;
     const ratio = claimedSubtotal > 0 ? sub / claimedSubtotal : 0;
     const taxShare = receipt.tax * ratio;
-    const tipShare = eats ? tipPerHead : 0;
+    const tipShare =
+      serviceClaimed > 0
+        ? (serviceUnitsByParticipant.get(p.id) ?? 0) * receipt.serviceCharge
+        : eats
+        ? fallbackTipPerHead
+        : 0;
     const share = taxShare + tipShare;
     return {
       participant: p,
       subtotal: round2(sub),
+      serviceShare: round2(tipShare),
+      taxShare: round2(taxShare),
       share: round2(share),
       total: round2(sub + share),
     };

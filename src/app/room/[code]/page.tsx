@@ -12,6 +12,7 @@ import {
   receiptSubtotal,
   userUnits,
   DRIFT_TOLERANCE,
+  SERVICE_ITEM_ID,
 } from "@/lib/domain/totals";
 import { formatMoney, cn, participantColor } from "@/lib/utils";
 import { apiUrl } from "@/lib/api";
@@ -63,30 +64,38 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
     });
   }, [code]);
 
+  const rejoinRef = useRef<string | null>(null);
   useEffect(() => {
     if (!me || !room) return;
     if (room.participants.some((p) => p.id === me.id)) return;
+    const key = `${me.id}:${me.name}`;
+    if (rejoinRef.current === key) return;
+    rejoinRef.current = key;
     let cancelled = false;
     (async () => {
-      const res = await fetch(apiUrl(`/api/rooms/${code}/join`), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: me.name }),
-      });
-      if (cancelled) return;
-      if (res.status === 409) {
-        localStorage.removeItem(meKey(code));
-        setMe(null);
-        setName(me.name);
-        setJoinError("Твоё имя уже занято — выбери себя из списка или введи другое.");
-        return;
-      }
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data.you) {
-        localStorage.setItem(meKey(code), JSON.stringify(data.you));
-        if (data.room) setRoom(data.room);
-        setMe(data.you);
+      try {
+        const res = await fetch(apiUrl(`/api/rooms/${code}/join`), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: me.name }),
+        });
+        if (cancelled) return;
+        if (res.status === 409) {
+          localStorage.removeItem(meKey(code));
+          setMe(null);
+          setName(me.name);
+          setJoinError("Твоё имя уже занято — выбери себя из списка или введи другое.");
+          return;
+        }
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.you) {
+          localStorage.setItem(meKey(code), JSON.stringify(data.you));
+          if (data.room) setRoom(data.room);
+          setMe(data.you);
+        }
+      } catch {
+        rejoinRef.current = null;
       }
     })();
     return () => {
@@ -99,22 +108,19 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
     setMe(p);
   }
 
-  async function signOut() {
-    if (me) {
-      try {
-        await fetch(apiUrl(`/api/rooms/${code}/leave`), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ participantId: me.id }),
-          keepalive: true,
-        });
-      } catch {
-        /* ignore — user is leaving anyway */
-      }
-    }
+  function signOut() {
+    const oldMe = me;
     localStorage.removeItem(meKey(code));
     setMe(null);
     setName("");
+    if (oldMe) {
+      fetch(apiUrl(`/api/rooms/${code}/leave`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ participantId: oldMe.id }),
+        keepalive: true,
+      }).catch(() => {});
+    }
   }
 
   async function joinAsNew() {
@@ -318,6 +324,16 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
         ))}
       </div>
 
+      {receipt.serviceCharge > 0 && (
+        <ServiceCard
+          serviceCharge={receipt.serviceCharge}
+          currency={receipt.currency}
+          room={room}
+          me={me}
+          onSet={(u) => setUnits(SERVICE_ITEM_ID, u)}
+        />
+      )}
+
       <section className="mt-6">
         <div className="text-sm text-mute mb-2 px-1">Расчёт</div>
         <div className="card p-4 space-y-4">
@@ -333,9 +349,15 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
                       {t.participant.name}
                       {t.participant.id === me.id && <span className="text-mute text-xs ml-2">(ты)</span>}
                     </div>
-                    {t.share > 0 && (
-                      <div className="text-xs text-mute">
-                        + {formatMoney(t.share, receipt.currency)} сервис/налог
+                    {(t.serviceShare > 0 || t.taxShare > 0) && (
+                      <div className="text-xs text-mute mt-0.5 tabular-nums">
+                        вкл.{" "}
+                        {[
+                          t.serviceShare > 0 && `${formatMoney(t.serviceShare, receipt.currency)} сервис`,
+                          t.taxShare > 0 && `${formatMoney(t.taxShare, receipt.currency)} налог`,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
                       </div>
                     )}
                   </div>
@@ -511,6 +533,141 @@ function ItemCard({
   );
 }
 
+function ServiceCard({
+  serviceCharge,
+  currency,
+  room,
+  me,
+  onSet,
+}: {
+  serviceCharge: number;
+  currency: string;
+  room: Room;
+  me: Participant;
+  onSet: (units: number) => void;
+}) {
+  const myUnits = userUnits(room, SERVICE_ITEM_ID, me.id);
+  const claimed = room.selections
+    .filter((s) => s.itemId === SERVICE_ITEM_ID && s.units > 0)
+    .reduce((a, b) => a + b.units, 0);
+  const eaters = room.selections
+    .filter((s) => s.itemId === SERVICE_ITEM_ID && s.units > 0)
+    .map((s) => ({
+      p: room.participants.find((x) => x.id === s.participantId)!,
+      units: s.units,
+    }))
+    .filter((e) => e.p);
+  const allEaters = [...eaters].sort((a, b) =>
+    a.p.id === me.id ? -1 : b.p.id === me.id ? 1 : 0,
+  );
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const drift = Math.abs(claimed - 1);
+  const full = claimed > 0 && drift <= DRIFT_TOLERANCE;
+  const over = claimed > 1 && drift > DRIFT_TOLERANCE;
+
+  return (
+    <section className="mt-6">
+      <div
+        className={cn(
+          "rounded-[20px] border border-white/[0.06] p-4 relative overflow-hidden transition-colors",
+          over
+            ? "bg-danger/[0.12]"
+            : full
+            ? "bg-success/[0.12]"
+            : myUnits > 0
+            ? "bg-accent/5"
+            : "bg-surface",
+        )}
+      >
+        {(full || over) && (
+          <span
+            aria-hidden
+            className={cn(
+              "absolute left-0 top-0 bottom-0 w-0.5",
+              over ? "bg-danger" : "bg-success",
+            )}
+          />
+        )}
+        <div className="flex items-center gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="font-medium truncate flex items-center gap-2">
+              {over ? (
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-danger/20 text-danger shrink-0">
+                  <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2.5} />
+                </span>
+              ) : full ? (
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-success/20 text-success shrink-0">
+                  <Check className="w-3.5 h-3.5" strokeWidth={3} />
+                </span>
+              ) : null}
+              <span className="truncate">Сервис</span>
+            </div>
+            <div className="text-xs text-mute mt-0.5 tabular-nums">
+              {formatMoney(serviceCharge, currency)}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            className={cn(
+              "relative h-10 px-3 rounded-full border font-semibold text-xs tabular-nums transition shrink-0",
+              myUnits > 0
+                ? "border-accent/60 bg-accent/15 text-ink"
+                : "border-white/10 bg-white/[0.04] text-mute hover:bg-white/[0.08]",
+            )}
+          >
+            {myUnits > 0 ? fmtUnitsShort(myUnits) : "указать"}
+          </button>
+        </div>
+
+        {allEaters.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {allEaters.map(({ p, units }) => {
+              const isMe = p.id === me.id;
+              return (
+                <span
+                  key={p.id}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs border whitespace-nowrap",
+                    isMe
+                      ? "bg-white/[0.08] border-white/15 text-ink font-medium"
+                      : "bg-white/[0.03] border-white/10 text-mute",
+                  )}
+                >
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ background: participantColor(p.name) }}
+                  />
+                  <span className="inline-flex items-center gap-0.5">
+                    <span>{p.name}</span>
+                    <span className="opacity-60">·</span>
+                    <span className="tabular-nums">{fmtUnitsShort(units)}</span>
+                  </span>
+                </span>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {pickerOpen && (
+        <UnitsPickerDialog
+          item={{ name: "Сервис", quantity: 1 }}
+          participantsCount={room.participants.length}
+          value={myUnits}
+          onClose={() => setPickerOpen(false)}
+          onCommit={(v) => {
+            onSet(v);
+            setPickerOpen(false);
+          }}
+        />
+      )}
+    </section>
+  );
+}
+
 function UnitsStepper({
   value,
   onChange,
@@ -631,7 +788,7 @@ function UnitsPickerDialog({
     <DialogShell onClose={onClose} title={item.name}>
       <div className="space-y-5">
         <div>
-          <div className="text-xs text-mute mb-2">Количество порций</div>
+          <div className="text-xs text-mute mb-2">Количество позиций</div>
           <Carousel
             options={portionOptions}
             value={portions}
@@ -704,7 +861,7 @@ function CustomValueDialog({
     <DialogShell onClose={onClose} onBack={onBack} title="Ввести вручную">
       <div className="space-y-4">
         <div className="text-xs text-mute">
-          Сколько порций ты съел. Дробное — твоя доля от одной порции (например, <span className="text-ink">0.5</span> — половина, <span className="text-ink">1.5</span> — полторы).
+          Сколько позиций ты взял. Дробное — твоя доля от одной (например, <span className="text-ink">0.5</span> — половина, <span className="text-ink">1.5</span> — полторы).
         </div>
         <input
           ref={inputRef}

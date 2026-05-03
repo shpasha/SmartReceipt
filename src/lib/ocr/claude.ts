@@ -144,8 +144,23 @@ export class ClaudeOCRProvider implements OCRProvider {
       );
     }
 
+    parsed.items = mergeDuplicates(parsed.items);
     return parsed;
   }
+}
+
+function mergeDuplicates<T extends { name: string; quantity: number; unitPrice: number }>(items: T[]): T[] {
+  const map = new Map<string, T>();
+  for (const item of items) {
+    const key = `${item.name.trim().toLowerCase()}|${item.unitPrice}`;
+    const existing = map.get(key);
+    if (existing) {
+      existing.quantity += item.quantity;
+    } else {
+      map.set(key, { ...item });
+    }
+  }
+  return [...map.values()];
 }
 
 function extractJSON(text: string): unknown {

@@ -48,6 +48,8 @@ export interface Room {
 export interface ParticipantTotal {
   participant: Participant;
   subtotal: number;
+  serviceShare: number;
+  taxShare: number;
   share: number;
   total: number;
 }

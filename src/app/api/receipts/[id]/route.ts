@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 import { receipts, rooms } from "@/lib/store";
 import { bus, roomChannel } from "@/lib/events";
+import { SERVICE_ITEM_ID } from "@/lib/domain/totals";
 
 const ItemSchema = z.object({
   id: z.string().optional(),
@@ -72,7 +73,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   if (!updated) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  const validIds = new Set(updated.items.map((i) => i.id));
+  const validIds = new Set([...updated.items.map((i) => i.id), SERVICE_ITEM_ID]);
   const affected = rooms.cleanOrphanSelections(id, validIds);
   for (const room of affected) {
     bus.publish(roomChannel(room.code), { type: "room", room });

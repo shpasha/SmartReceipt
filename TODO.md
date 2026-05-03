@@ -12,4 +12,3 @@
 - В UI комнаты — миниатюра чека сверху (или в шапке), клик → fullscreen lightbox.
 - На cleanup (TTL 7 дней) — удалять файл вместе с receipt.
 - Лимит upload **10 MB**, проверять и в API, и в nginx (`client_max_body_size 11m`).
-

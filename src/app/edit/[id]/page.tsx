@@ -277,34 +277,6 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
         </div>
       )}
 
-      <section className="mt-6">
-        <div className="text-sm text-mute mb-2 px-1">Справка</div>
-        <div className="card p-4 text-sm space-y-2.5">
-          <div className="flex gap-3">
-            <span className="text-accent shrink-0">·</span>
-            <span>
-              <span className="font-medium">Налог</span>
-              <span className="text-mute"> — пропорционально твоей доле в счёте.</span>
-            </span>
-          </div>
-          <div className="flex gap-3">
-            <span className="text-accent shrink-0">·</span>
-            <span>
-              <span className="font-medium">Сервис</span>
-              <span className="text-mute"> — поровну на каждого, кто что-то ел.</span>
-            </span>
-          </div>
-          <div className="flex gap-3">
-            <span className="text-accent shrink-0">·</span>
-            <span>
-              <span className="font-medium">Комментарий</span>
-              <span className="text-mute">
-                {" "}— заметка для участников комнаты: реквизиты для перевода, кто оплатил, и т.д.
-              </span>
-            </span>
-          </div>
-        </div>
-      </section>
     </main>
   );
 }

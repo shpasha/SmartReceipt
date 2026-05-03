@@ -4,7 +4,9 @@ import { dirname, resolve } from "node:path";
 import type { Receipt, Room, ReceiptItem, Participant, Selection } from "./domain/types";
 import { bus, roomChannel } from "./events";
 
-type Presence = { count: number; offlineSince: number | null };
+type Presence = { count: number; offlineSince: number | null; removeTimer?: NodeJS.Timeout | null };
+
+const PRESENCE_GRACE_MS = 3000;
 
 type Store = {
   receipts: Map<string, Receipt>;
@@ -226,8 +228,11 @@ export const rooms = {
       map = new Map();
       store.presence.set(code, map);
     }
-    const cur = map.get(participantId) ?? { count: 0, offlineSince: null };
-    map.set(participantId, { count: cur.count + 1, offlineSince: null });
+    const cur = map.get(participantId) ?? { count: 0, offlineSince: null, removeTimer: null };
+    if (cur.removeTimer) {
+      clearTimeout(cur.removeTimer);
+    }
+    map.set(participantId, { count: cur.count + 1, offlineSince: null, removeTimer: null });
   },
 
   closeConnection(code: string, participantId: string) {
@@ -240,8 +245,15 @@ export const rooms = {
       map.set(participantId, { ...cur, count: nextCount });
       return;
     }
-    map.delete(participantId);
-    rooms.removeIfEmpty(code, participantId);
+    if (cur.removeTimer) clearTimeout(cur.removeTimer);
+    const timer = setTimeout(() => {
+      const m = store.presence.get(code);
+      const entry = m?.get(participantId);
+      if (!entry || entry.count > 0) return;
+      m!.delete(participantId);
+      rooms.removeIfEmpty(code, participantId);
+    }, PRESENCE_GRACE_MS);
+    map.set(participantId, { count: 0, offlineSince: Date.now(), removeTimer: timer });
   },
 
   rename(code: string, name: string): Room | undefined {
