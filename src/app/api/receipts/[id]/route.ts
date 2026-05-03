@@ -20,6 +20,7 @@ const FullItemSchema = z.object({
 });
 
 const PatchSchema = z.object({
+  expectedVersion: z.number().int().nonnegative().optional(),
   upsertItem: ItemSchema.optional(),
   removeItemId: z.string().optional(),
   items: z.array(FullItemSchema).optional(),
@@ -43,6 +44,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   let updated = receipts.get(id);
   if (!updated) return NextResponse.json({ error: "not found" }, { status: 404 });
+
+  if (body.expectedVersion !== undefined && updated.version !== body.expectedVersion) {
+    return NextResponse.json(
+      { error: "version_conflict", receipt: updated },
+      { status: 409 },
+    );
+  }
 
   if (body.items) {
     const normalized = body.items.map((i) => ({

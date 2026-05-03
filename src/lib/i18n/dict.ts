@@ -49,6 +49,7 @@ export type Dict = {
     yourName: string;
     create: string;
     itemNamePh: string;
+    versionConflict: string;
     aria: { remove: string; qty: string; price: string };
   };
   room: {
@@ -154,6 +155,7 @@ const ru: Dict = {
     yourName: "Твоё имя",
     create: "Создать",
     itemNamePh: "Название позиции",
+    versionConflict: "Чек уже изменили — подгрузил свежую версию. Внеси правки заново и сохрани.",
     aria: { remove: "Удалить позицию", qty: "Количество", price: "Цена за единицу" },
   },
   room: {
@@ -259,6 +261,7 @@ const en: Dict = {
     yourName: "Your name",
     create: "Create",
     itemNamePh: "Item name",
+    versionConflict: "Receipt was just edited — loaded the fresh version. Re-apply your changes and save again.",
     aria: { remove: "Remove item", qty: "Quantity", price: "Unit price" },
   },
   room: {

@@ -10,6 +10,7 @@ export interface ReceiptItem {
 export interface Receipt {
   id: ID;
   createdAt: number;
+  version: number;
   currency: string;
   items: ReceiptItem[];
   serviceCharge: number;

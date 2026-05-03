@@ -68,28 +68,37 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
     if (!receipt || !roomCode) return;
     setSaving(true);
     try {
-      const [recRes] = await Promise.all([
-        fetch(apiUrl(`/api/receipts/${id}`), {
+      const recRes = await fetch(apiUrl(`/api/receipts/${id}`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          expectedVersion: receipt.version,
+          items: receipt.items,
+          serviceCharge: receipt.serviceCharge,
+          tax: receipt.tax,
+          currency: receipt.currency,
+          comment: receipt.comment ?? "",
+        }),
+      });
+      if (recRes.status === 409) {
+        const data = await recRes.json();
+        alert(t("edit.versionConflict"));
+        if (data?.receipt) setReceipt(data.receipt);
+        setSaving(false);
+        return;
+      }
+      if (!recRes.ok) {
+        setSaving(false);
+        return;
+      }
+      if (roomName.trim()) {
+        await fetch(apiUrl(`/api/rooms/${roomCode}`), {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            items: receipt.items,
-            serviceCharge: receipt.serviceCharge,
-            tax: receipt.tax,
-            currency: receipt.currency,
-            comment: receipt.comment ?? "",
-          }),
-        }),
-        roomName.trim()
-          ? fetch(apiUrl(`/api/rooms/${roomCode}`), {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ name: roomName.trim() }),
-            })
-          : Promise.resolve(null),
-      ]);
-      if (recRes.ok) router.replace(`/room/${roomCode}`);
-      else setSaving(false);
+          body: JSON.stringify({ name: roomName.trim() }),
+        });
+      }
+      router.replace(`/room/${roomCode}`);
     } catch {
       setSaving(false);
     }

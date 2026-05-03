@@ -34,7 +34,10 @@ if (!g.__smartreceiptLoaded) {
   try {
     const raw = readFileSync(STATE_FILE, "utf8");
     const data = JSON.parse(raw) as { receipts?: Receipt[]; rooms?: Room[] };
-    for (const r of data.receipts ?? []) store.receipts.set(r.id, r);
+    for (const r of data.receipts ?? []) {
+      if (typeof r.version !== "number") r.version = 0;
+      store.receipts.set(r.id, r);
+    }
     for (const r of data.rooms ?? []) store.rooms.set(r.code, r);
     console.log(
       `event=state.loaded receipts=${store.receipts.size} rooms=${store.rooms.size} file=${STATE_FILE}`,
@@ -68,8 +71,8 @@ function persist() {
 
 
 export const receipts = {
-  create(input: Omit<Receipt, "id" | "createdAt">): Receipt {
-    const r: Receipt = { id: nanoid(10), createdAt: Date.now(), ...input };
+  create(input: Omit<Receipt, "id" | "createdAt" | "version">): Receipt {
+    const r: Receipt = { id: nanoid(10), createdAt: Date.now(), version: 0, ...input };
     store.receipts.set(r.id, r);
     persist();
     return r;
@@ -77,10 +80,10 @@ export const receipts = {
   get(id: string) {
     return store.receipts.get(id);
   },
-  update(id: string, patch: Partial<Omit<Receipt, "id" | "createdAt">>) {
+  update(id: string, patch: Partial<Omit<Receipt, "id" | "createdAt" | "version">>) {
     const cur = store.receipts.get(id);
     if (!cur) return undefined;
-    const next: Receipt = { ...cur, ...patch };
+    const next: Receipt = { ...cur, ...patch, version: cur.version + 1 };
     store.receipts.set(id, next);
     persist();
     return next;
@@ -100,7 +103,7 @@ export const receipts = {
       };
       items = [...items, newItem];
     }
-    const next = { ...cur, items };
+    const next: Receipt = { ...cur, items, version: cur.version + 1 };
     store.receipts.set(id, next);
     persist();
     return next;
@@ -108,7 +111,11 @@ export const receipts = {
   removeItem(id: string, itemId: string) {
     const cur = store.receipts.get(id);
     if (!cur) return undefined;
-    const next = { ...cur, items: cur.items.filter((i) => i.id !== itemId) };
+    const next: Receipt = {
+      ...cur,
+      items: cur.items.filter((i) => i.id !== itemId),
+      version: cur.version + 1,
+    };
     store.receipts.set(id, next);
     persist();
     return next;
@@ -116,7 +123,7 @@ export const receipts = {
   replaceItems(id: string, items: ReceiptItem[]) {
     const cur = store.receipts.get(id);
     if (!cur) return undefined;
-    const next = { ...cur, items };
+    const next: Receipt = { ...cur, items, version: cur.version + 1 };
     store.receipts.set(id, next);
     persist();
     return next;
