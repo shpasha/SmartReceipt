@@ -177,9 +177,9 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
       <main className="mx-auto max-w-md px-5 pt-24 text-center">
         <h1 className="text-xl font-medium mb-2">{t("room.notFound")}</h1>
         <p className="text-mute text-sm mb-6">{t("room.notFoundHint")}</p>
-        <Link href="/" className="btn btn-ghost">
-          <Home className="w-4 h-4" /> {t("common.home")}
-        </Link>
+        <NavBar>
+          <NavCell href="/" icon={<Home className="w-5 h-5" />} label={t("common.home")} />
+        </NavBar>
       </main>
     );
   }
@@ -192,8 +192,13 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
     );
     return (
       <main className="mx-auto max-w-md px-5 pt-12 pb-24">
-        <div className="chip mb-4">
-          <Users className="w-3.5 h-3.5" /> {t("room.roomLabel", { code })}
+        <div className="mb-5">
+          <h1 className="text-xl font-semibold truncate">
+            {room?.name || t("room.roomLabel", { code })}
+          </h1>
+          <div className="mt-0.5 text-mute text-sm font-mono tracking-[0.2em]">
+            {code}
+          </div>
         </div>
 
         <div className="card p-6">
@@ -256,10 +261,10 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
           </>
         )}
 
-        <div className="mt-6 flex justify-center">
-          <Link href="/" className="btn btn-ghost">
-            <Home className="w-4 h-4" /> {t("common.home")}
-          </Link>
+        <div className="mt-6">
+          <NavBar>
+            <NavCell href="/" icon={<Home className="w-5 h-5" />} label={t("common.home")} />
+          </NavBar>
         </div>
       </main>
     );
@@ -276,7 +281,7 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
   }
 
   return (
-    <main className="mx-auto max-w-2xl px-5 pt-8 pb-32">
+    <main className="mx-auto max-w-2xl px-5 pt-8 pb-16">
       <div className="flex items-center justify-between mb-5">
         <div className="min-w-0">
           <div className="text-lg sm:text-xl font-semibold truncate">{room.name || t("room.roomLabel", { code })}</div>
@@ -292,27 +297,7 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
             {copied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-3.5 h-3.5 opacity-60" />}
           </button>
         </div>
-        <div className="flex flex-col items-end gap-1.5">
-          <ParticipantsStrip participants={room.participants} meId={me.id} />
-          <div className="flex items-center gap-3">
-            <Link
-              href={`/edit/${receipt.id}?room=${code}`}
-              className="text-xs text-accent hover:text-accent/80 transition flex items-center gap-1"
-              title={t("room.editReceiptTitle")}
-            >
-              <Pencil className="w-3 h-3" />
-              {t("room.editReceipt")}
-            </Link>
-            <button
-              onClick={signOut}
-              className="text-xs text-mute hover:text-ink transition flex items-center gap-1"
-              title={t("room.leaveTitle", { name: me.name })}
-            >
-              <LogOut className="w-3 h-3" />
-              {t("room.leave")}
-            </button>
-          </div>
-        </div>
+        <ParticipantsStrip participants={room.participants} meId={me.id} />
       </div>
 
 
@@ -387,10 +372,23 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
         </section>
       )}
 
-      <div className="mt-6 flex justify-center">
-        <Link href="/" className="btn btn-ghost">
-          <Home className="w-4 h-4" /> {t("common.home")}
-        </Link>
+      <div className="mt-8">
+        <NavBar>
+          <NavCell href="/" icon={<Home className="w-5 h-5" />} label={t("common.home")} />
+          <NavCell
+            href={`/edit/${receipt.id}?room=${code}`}
+            icon={<Pencil className="w-5 h-5" />}
+            label={t("room.editReceipt")}
+            title={t("room.editReceiptTitle")}
+          />
+          <NavCell
+            onClick={signOut}
+            icon={<LogOut className="w-5 h-5" />}
+            label={t("room.leave")}
+            title={t("room.leaveTitle", { name: me.name })}
+            danger
+          />
+        </NavBar>
       </div>
     </main>
   );
@@ -1142,5 +1140,56 @@ function Avatar({ p }: { p: Participant }) {
     >
       {p.name.slice(0, 1).toUpperCase()}
     </div>
+  );
+}
+
+function NavBar({ children }: { children: React.ReactNode }) {
+  const count = Array.isArray(children) ? children.length : 1;
+  return (
+    <nav
+      className={cn(
+        "card overflow-hidden grid divide-x divide-white/5",
+        count === 1 ? "grid-cols-1" : count === 2 ? "grid-cols-2" : "grid-cols-3",
+      )}
+    >
+      {children}
+    </nav>
+  );
+}
+
+function NavCell({
+  href,
+  onClick,
+  icon,
+  label,
+  title,
+  danger,
+}: {
+  href?: string;
+  onClick?: () => void;
+  icon: React.ReactNode;
+  label: string;
+  title?: string;
+  danger?: boolean;
+}) {
+  const cls = cn(
+    "flex flex-col items-center justify-center gap-1 py-3 text-[11px] font-medium text-mute transition",
+    danger
+      ? "hover:text-danger hover:bg-danger/[0.06]"
+      : "hover:text-ink hover:bg-white/[0.04]",
+  );
+  if (href) {
+    return (
+      <Link href={href} className={cls} title={title}>
+        {icon}
+        {label}
+      </Link>
+    );
+  }
+  return (
+    <button type="button" onClick={onClick} className={cls} title={title}>
+      {icon}
+      {label}
+    </button>
   );
 }
