@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run start` — run the standalone build.
 - `npm run lint` — `next lint`.
 - `npm run typecheck` — `tsc --noEmit`. There is no test suite.
-- `npm run deploy` — `bash scripts/deploy.sh`. Deploys to the prod VPS (`root@<PROD_HOST>`) under base path `/receipt`. See `docs/server.md` before touching deploy/server config.
+- `npm run deploy` — `bash scripts/deploy.sh`. Deploys to the prod VPS under base path `/receipt`. See `docs/server.md` before touching deploy/server config.
 
 Path alias: `@/* → ./src/*`. Server actions accept up to 10 MB (`next.config.mjs`).
 
@@ -20,8 +20,8 @@ SmartReceipt is a Next.js 16 App Router app (React 19) that OCRs a restaurant re
 ### Request flow
 
 1. **Upload** → `POST /api/receipts` (`src/app/api/receipts/route.ts`) takes a multipart `image`, base64-encodes it, and calls the OCR provider.
-2. **OCR** → `src/lib/ocr/claude.ts` (`ClaudeOCRProvider`, model `claude-sonnet-4-6`). The strict `SYSTEM` prompt + Zod `Schema` is the contract — extend both together if changing fields. Outbound traffic to `api.anthropic.com` goes through `HTTPS_PROXY` via undici `ProxyAgent` (required from RU; without it the API returns 403).
-3. **Persist** → `src/lib/store.ts` is the single source of truth: a process-global `Map`-based store cached on `globalThis` to survive Next dev HMR. Mutations call `persist()`, which debounces (500ms) an atomic write of the full state to `STATE_FILE` (default `data/state.json`, prod: `<STATE_DIR>/state.json`). State is loaded once at module init.
+2. **OCR** → `src/lib/ocr/claude.ts` (`ClaudeOCRProvider`, model `claude-sonnet-4-6`). The strict `SYSTEM` prompt + Zod `Schema` is the contract — extend both together if changing fields. Outbound traffic to `api.anthropic.com` is routed through proxies listed in `OCR_PROXIES` (comma-separated, with failover and sticky preference) via undici `ProxyAgent`; falls back to `HTTPS_PROXY` if the new var is unset.
+3. **Persist** → `src/lib/store.ts` is the single source of truth: a process-global `Map`-based store cached on `globalThis` to survive Next dev HMR. Mutations call `persist()`, which debounces (500ms) an atomic write of the full state to `STATE_FILE` (default `data/state.json`; prod path is set via env). State is loaded once at module init.
 4. **Room** → host creates a room (`/api/rooms`), shares the code; others `POST /api/rooms/[code]/join`. Selections are written via `/api/rooms/[code]/select` and bumped per-item-per-participant.
 5. **Realtime** → SSE at `/api/rooms/[code]/events`. The in-process `EventBus` (`src/lib/events.ts`, also pinned on `globalThis`) fans out `room` events on channel `roomChannel(code)`. Presence is tracked by counting open SSE connections per participant in `store.presence`; when the last connection closes and the participant has no selections, `rooms.removeIfEmpty` evicts them and broadcasts.
 
@@ -38,4 +38,4 @@ SmartReceipt is a Next.js 16 App Router app (React 19) that OCRs a restaurant re
 
 ### Server / deploy
 
-`docs/server.md` is authoritative for the prod box (nginx TLS termination, systemd unit, env file at `<ENV_DIR>/env`, state file location, log tailing). `scripts/deploy.sh` rsyncs with `--delete` then builds remotely — locally-deleted files vanish on the server, so commit removals before deploying.
+`docs/server.md` (gitignored) is authoritative for prod-box specifics — nginx, systemd unit, env file path, state file location, log tailing. `scripts/deploy.sh` (also gitignored) rsyncs with `--delete` then builds remotely — locally-deleted files vanish on the server, so commit removals before deploying.

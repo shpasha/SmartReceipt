@@ -3,11 +3,26 @@ import { z } from "zod";
 import { fetch as undiciFetch, ProxyAgent } from "undici";
 import type { OCRProvider, ParsedReceipt } from "./types";
 import { OCRError } from "./types";
+import { logEvent } from "@/lib/log";
 
-function buildFetch(): typeof fetch | undefined {
-  const proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy;
-  if (!proxyUrl) return undefined;
-  const dispatcher = new ProxyAgent(proxyUrl);
+function getProxyUrls(): string[] {
+  const list = process.env.OCR_PROXIES ?? process.env.HTTPS_PROXY ?? process.env.https_proxy ?? "";
+  return list
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function proxyLabel(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.hostname}:${u.port || (u.protocol === "https:" ? "443" : "80")}`;
+  } catch {
+    return "invalid";
+  }
+}
+
+function buildFetchWith(dispatcher: ProxyAgent): typeof fetch {
   return ((url: string | URL | Request, init?: RequestInit) => {
     const merged = Object.assign({}, init ?? {}, { dispatcher });
     return undiciFetch(url as never, merged as never);
@@ -57,51 +72,81 @@ Rules:
 
 Output: the JSON object only.`;
 
+type Channel = { label: string; client: Anthropic };
+
 export class ClaudeOCRProvider implements OCRProvider {
-  private client: Anthropic;
+  private channels: Channel[];
+  private preferredIndex = 0;
 
   constructor(apiKey = process.env.ANTHROPIC_API_KEY) {
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
-    const customFetch = buildFetch();
-    this.client = new Anthropic({
-      apiKey,
-      ...(customFetch && { fetch: customFetch }),
-    });
+    const proxies = getProxyUrls();
+    if (proxies.length === 0) {
+      this.channels = [{ label: "direct", client: new Anthropic({ apiKey }) }];
+    } else {
+      this.channels = proxies.map((url) => ({
+        label: proxyLabel(url),
+        client: new Anthropic({ apiKey, fetch: buildFetchWith(new ProxyAgent(url)) }),
+      }));
+    }
   }
 
   async parse(image: { base64: string; mimeType: string }): Promise<ParsedReceipt> {
-    let res;
-    try {
-      res = await this.client.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 2048,
-        system: SYSTEM,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "image",
-                source: {
-                  type: "base64",
-                  media_type: image.mimeType as "image/jpeg" | "image/png" | "image/webp" | "image/gif",
-                  data: image.base64,
+    let res: Anthropic.Message | undefined;
+    let lastErr: unknown;
+    const n = this.channels.length;
+    for (let step = 0; step < n; step++) {
+      const idx = (this.preferredIndex + step) % n;
+      const channel = this.channels[idx];
+      try {
+        res = await channel.client.messages.create({
+          model: "claude-sonnet-4-6",
+          max_tokens: 2048,
+          system: SYSTEM,
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "image",
+                  source: {
+                    type: "base64",
+                    media_type: image.mimeType as "image/jpeg" | "image/png" | "image/webp" | "image/gif",
+                    data: image.base64,
+                  },
                 },
-              },
-              { type: "text", text: "Parse this receipt into JSON matching the schema." },
-            ],
-          },
-        ],
+                { type: "text", text: "Parse this receipt into JSON matching the schema." },
+              ],
+            },
+          ],
+        });
+        if (idx !== this.preferredIndex) {
+          logEvent("ocr.preferred_changed", { from: this.channels[this.preferredIndex].label, to: channel.label });
+          this.preferredIndex = idx;
+        }
+        break;
+      } catch (err) {
+        lastErr = err;
+        const status = (err as { status?: number })?.status;
+        const msg = err instanceof Error ? err.message : String(err);
+        if (status === 400 && /image|media|could not process|invalid/i.test(msg)) {
+          throw new OCRError("not_a_receipt", "На фото не похоже на чек — попробуй ещё раз");
+        }
+        if (status && status >= 400 && status < 500 && status !== 429) {
+          throw new OCRError("parse_failed", "Не удалось распознать чек. Попробуй сделать фото ярче и без бликов");
+        }
+        logEvent("ocr.channel_failed", {
+          channel: channel.label,
+          status: status ?? 0,
+          error: shortErr(err),
+        });
+      }
+    }
+    if (!res) {
+      logEvent("ocr.all_channels_failed", {
+        channels: this.channels.length,
+        error: shortErr(lastErr),
       });
-    } catch (err) {
-      const status = (err as { status?: number })?.status;
-      const msg = err instanceof Error ? err.message : String(err);
-      if (status === 400 && /image|media|could not process|invalid/i.test(msg)) {
-        throw new OCRError("not_a_receipt", "На фото не похоже на чек — попробуй ещё раз");
-      }
-      if (status && status >= 400 && status < 500) {
-        throw new OCRError("parse_failed", "Не удалось распознать чек. Попробуй сделать фото ярче и без бликов");
-      }
       throw new OCRError("transient", "Сервис распознавания временно недоступен. Попробуй ещё раз через минуту");
     }
 
@@ -147,6 +192,16 @@ export class ClaudeOCRProvider implements OCRProvider {
     parsed.items = mergeDuplicates(parsed.items);
     return parsed;
   }
+}
+
+function shortErr(err: unknown): string {
+  if (!err) return "unknown";
+  if (err instanceof Error) {
+    const cause = (err as { cause?: { code?: string; message?: string } }).cause;
+    const code = cause?.code ? `[${cause.code}]` : "";
+    return `${err.name}${code}: ${err.message}`.slice(0, 200);
+  }
+  return String(err).slice(0, 200);
 }
 
 function mergeDuplicates<T extends { name: string; quantity: number; unitPrice: number }>(items: T[]): T[] {

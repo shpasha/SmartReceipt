@@ -16,12 +16,14 @@ import {
 } from "@/lib/domain/totals";
 import { formatMoney, cn, participantColor } from "@/lib/utils";
 import { apiUrl } from "@/lib/api";
+import { useT } from "@/lib/i18n/provider";
 
 const meKey = (code: string) => `room:${code}:me`;
 
 export default function RoomPage({ params }: { params: Promise<{ code: string }> }) {
   const { code: raw } = use(params);
   const code = raw.toUpperCase();
+  const t = useT();
   const [room, setRoom] = useState<Room | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [me, setMe] = useState<Participant | null>(null);
@@ -84,7 +86,7 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
           localStorage.removeItem(meKey(code));
           setMe(null);
           setName(me.name);
-          setJoinError("Твоё имя уже занято — выбери себя из списка или введи другое.");
+          setJoinError(t("room.rejoinNameTaken"));
           return;
         }
         if (!res.ok) return;
@@ -135,11 +137,11 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
         body: JSON.stringify({ name: trimmed }),
       });
       if (res.status === 409) {
-        setJoinError("Это имя уже занято — выбери себя из списка или введи другое.");
+        setJoinError(t("room.joinErrorTaken"));
         return;
       }
       if (!res.ok) {
-        setJoinError("Не получилось войти. Попробуй ещё раз.");
+        setJoinError(t("room.joinErrorGeneric"));
         return;
       }
       const data = await res.json();
@@ -168,10 +170,10 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
   if (notFound) {
     return (
       <main className="mx-auto max-w-md px-5 pt-24 text-center">
-        <h1 className="text-xl font-medium mb-2">Комната не найдена</h1>
-        <p className="text-mute text-sm mb-6">Проверь код и попробуй ещё раз.</p>
+        <h1 className="text-xl font-medium mb-2">{t("room.notFound")}</h1>
+        <p className="text-mute text-sm mb-6">{t("room.notFoundHint")}</p>
         <Link href="/" className="btn btn-ghost">
-          <Home className="w-4 h-4" /> На главную
+          <Home className="w-4 h-4" /> {t("common.home")}
         </Link>
       </main>
     );
@@ -186,12 +188,12 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
     return (
       <main className="mx-auto max-w-md px-5 pt-12 pb-24">
         <div className="chip mb-4">
-          <Users className="w-3.5 h-3.5" /> Комната {code}
+          <Users className="w-3.5 h-3.5" /> {t("room.roomLabel", { code })}
         </div>
 
         <div className="card p-6">
-          <div className="font-medium mb-1">Зайти новым человеком</div>
-          <p className="text-mute text-sm mb-4">Введи имя — друзья увидят его в комнате.</p>
+          <div className="font-medium mb-1">{t("room.joinNew")}</div>
+          <p className="text-mute text-sm mb-4">{t("room.joinNewHint")}</p>
           <input
             className="input w-full"
             value={name}
@@ -202,11 +204,11 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
             onKeyDown={(e) => {
               if (e.key === "Enter" && trimmed && !taken) joinAsNew();
             }}
-            placeholder="Имя"
+            placeholder={t("room.namePh")}
           />
           {trimmed && taken && !joining && (
             <div className="mt-2 text-xs text-danger">
-              Имя «{trimmed}» уже занято — выбери себя ниже или введи другое.
+              {t("room.nameTakenInline", { name: trimmed })}
             </div>
           )}
           {joinError && <div className="mt-2 text-xs text-danger">{joinError}</div>}
@@ -215,7 +217,7 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
             disabled={!trimmed || taken || joining}
             className="btn btn-primary w-full mt-4"
           >
-            Войти
+            {t("common.enter")}
           </button>
         </div>
 
@@ -223,7 +225,7 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
           <>
             <div className="flex items-center gap-3 my-5 text-xs text-mute uppercase tracking-wider">
               <div className="flex-1 h-px bg-white/10" />
-              или продолжить как
+              {t("room.continueAs")}
               <div className="flex-1 h-px bg-white/10" />
             </div>
 
@@ -251,7 +253,7 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
 
         <div className="mt-6 flex justify-center">
           <Link href="/" className="btn btn-ghost">
-            <Home className="w-4 h-4" /> На главную
+            <Home className="w-4 h-4" /> {t("common.home")}
           </Link>
         </div>
       </main>
@@ -272,7 +274,7 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
     <main className="mx-auto max-w-2xl px-5 pt-8 pb-32">
       <div className="flex items-center justify-between mb-5">
         <div className="min-w-0">
-          <div className="text-lg sm:text-xl font-semibold truncate">{room.name || `Комната ${code}`}</div>
+          <div className="text-lg sm:text-xl font-semibold truncate">{room.name || t("room.roomLabel", { code })}</div>
           <button
             onClick={() => {
               navigator.clipboard.writeText(window.location.href);
@@ -291,18 +293,18 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
             <Link
               href={`/edit/${receipt.id}?room=${code}`}
               className="text-xs text-accent hover:text-accent/80 transition flex items-center gap-1"
-              title="Внести правки в чек"
+              title={t("room.editReceiptTitle")}
             >
               <Pencil className="w-3 h-3" />
-              Внести правки
+              {t("room.editReceipt")}
             </Link>
             <button
               onClick={signOut}
               className="text-xs text-mute hover:text-ink transition flex items-center gap-1"
-              title={`Выйти из роли «${me.name}»`}
+              title={t("room.leaveTitle", { name: me.name })}
             >
               <LogOut className="w-3 h-3" />
-              Выйти
+              {t("room.leave")}
             </button>
           </div>
         </div>
@@ -335,26 +337,26 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
       )}
 
       <section className="mt-6">
-        <div className="text-sm text-mute mb-2 px-1">Расчёт</div>
+        <div className="text-sm text-mute mb-2 px-1">{t("room.calc")}</div>
         <div className="card p-4 space-y-4">
-          {totals.every((t) => t.subtotal === 0) ? (
-            <div className="text-mute text-sm text-center py-4">Никто ещё ничего не выбрал</div>
+          {totals.every((row) => row.subtotal === 0) ? (
+            <div className="text-mute text-sm text-center py-4">{t("room.nobodyYet")}</div>
           ) : (
-            totals.map((t) => (
-              <div key={t.participant.id} className="flex items-center justify-between">
+            totals.map((row) => (
+              <div key={row.participant.id} className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <Avatar p={t.participant} />
+                  <Avatar p={row.participant} />
                   <div>
                     <div className="font-medium">
-                      {t.participant.name}
-                      {t.participant.id === me.id && <span className="text-mute text-xs ml-2">(ты)</span>}
+                      {row.participant.name}
+                      {row.participant.id === me.id && <span className="text-mute text-xs ml-2">{t("room.you")}</span>}
                     </div>
-                    {(t.serviceShare > 0 || t.taxShare > 0) && (
+                    {(row.serviceShare > 0 || row.taxShare > 0) && (
                       <div className="text-xs text-mute mt-0.5 tabular-nums">
-                        вкл.{" "}
+                        {t("room.incl")}{" "}
                         {[
-                          t.serviceShare > 0 && `${formatMoney(t.serviceShare, receipt.currency)} сервис`,
-                          t.taxShare > 0 && `${formatMoney(t.taxShare, receipt.currency)} налог`,
+                          row.serviceShare > 0 && `${formatMoney(row.serviceShare, receipt.currency)} ${t("room.serviceShort")}`,
+                          row.taxShare > 0 && `${formatMoney(row.taxShare, receipt.currency)} ${t("room.taxShort")}`,
                         ]
                           .filter(Boolean)
                           .join(" · ")}
@@ -363,7 +365,7 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
                   </div>
                 </div>
                 <div className="text-right tabular-nums">
-                  <div className="font-semibold">{formatMoney(t.total, receipt.currency)}</div>
+                  <div className="font-semibold">{formatMoney(row.total, receipt.currency)}</div>
                 </div>
               </div>
             ))
@@ -373,7 +375,7 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
 
       {receipt.comment && (
         <section className="mt-6">
-          <div className="text-sm text-mute mb-2 px-1">Комментарий</div>
+          <div className="text-sm text-mute mb-2 px-1">{t("room.comment")}</div>
           <div className="card p-4 text-sm whitespace-pre-wrap leading-relaxed break-words">
             {receipt.comment}
           </div>
@@ -382,7 +384,7 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
 
       <div className="mt-6 flex justify-center">
         <Link href="/" className="btn btn-ghost">
-          <Home className="w-4 h-4" /> На главную
+          <Home className="w-4 h-4" /> {t("common.home")}
         </Link>
       </div>
     </main>
@@ -403,6 +405,7 @@ function ItemCard({
   me: Participant;
   onSet: (units: number) => void;
 }) {
+  const t = useT();
   const myUnits = userUnits(room, item.id, me.id);
   const claimed = claimedUnits(room, item.id);
   const status = itemStatus(item, claimed);
@@ -452,14 +455,14 @@ function ItemCard({
             {overclaimed ? (
               <span
                 className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-danger/20 text-danger shrink-0"
-                title="Разобрано больше чем в чеке"
+                title={t("room.overTooltip")}
               >
                 <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2.5} />
               </span>
             ) : fullyClaimed ? (
               <span
                 className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-success/20 text-success shrink-0"
-                title="Позиция полностью разобрана"
+                title={t("room.fullTooltip")}
               >
                 <Check className="w-3.5 h-3.5" strokeWidth={3} />
               </span>
@@ -513,7 +516,7 @@ function ItemCard({
       {showStatus && (
         <div className="mt-3 text-xs flex items-center gap-1.5 text-danger">
           <span className="w-1.5 h-1.5 rounded-full bg-danger" />
-          разобрано {fmtUnitsShort(claimed)} — больше чем в чеке ({fmtUnitsShort(item.quantity)})
+          {t("room.overNote", { claimed: fmtUnitsShort(claimed), total: fmtUnitsShort(item.quantity) })}
         </div>
       )}
 
@@ -546,6 +549,7 @@ function ServiceCard({
   me: Participant;
   onSet: (units: number) => void;
 }) {
+  const t = useT();
   const myUnits = userUnits(room, SERVICE_ITEM_ID, me.id);
   const claimed = room.selections
     .filter((s) => s.itemId === SERVICE_ITEM_ID && s.units > 0)
@@ -601,7 +605,7 @@ function ServiceCard({
                   <Check className="w-3.5 h-3.5" strokeWidth={3} />
                 </span>
               ) : null}
-              <span className="truncate">Сервис</span>
+              <span className="truncate">{t("room.service")}</span>
             </div>
             <div className="text-xs text-mute mt-0.5 tabular-nums">
               {formatMoney(serviceCharge, currency)}
@@ -618,7 +622,7 @@ function ServiceCard({
                 : "border-white/10 bg-white/[0.04] text-mute hover:bg-white/[0.08]",
             )}
           >
-            {myUnits > 0 ? fmtUnitsShort(myUnits) : "указать"}
+            {myUnits > 0 ? fmtUnitsShort(myUnits) : t("room.specify")}
           </button>
         </div>
 
@@ -654,7 +658,7 @@ function ServiceCard({
 
       {pickerOpen && (
         <UnitsPickerDialog
-          item={{ name: "Сервис", quantity: 1 }}
+          item={{ name: t("room.service"), quantity: 1 }}
           participantsCount={room.participants.length}
           value={myUnits}
           onClose={() => setPickerOpen(false)}
@@ -677,6 +681,7 @@ function UnitsStepper({
   onChange: (units: number) => void;
   onOpenPicker: () => void;
 }) {
+  const t = useT();
   const active = value > 0;
   return (
     <div
@@ -690,7 +695,7 @@ function UnitsStepper({
         onClick={() => onChange(Math.max(0, value - 1))}
         disabled={value === 0}
         className="w-8 h-8 rounded-full grid place-items-center transition disabled:opacity-30 hover:bg-white/10"
-        aria-label="Меньше"
+        aria-label={t("room.less")}
       >
         <Minus className="w-4 h-4" strokeWidth={2.5} />
       </button>
@@ -698,8 +703,8 @@ function UnitsStepper({
         type="button"
         onClick={onOpenPicker}
         className="relative w-10 h-8 grid place-items-center font-semibold text-xs tabular-nums text-ink rounded transition active:bg-white/15 hover:bg-white/10"
-        aria-label="Выбрать количество"
-        title={`Выбрать долю — ${fmtUnits(value)}`}
+        aria-label={t("room.pickQty")}
+        title={t("room.pickQtyTitle", { value: fmtUnits(value) })}
       >
         {fmtUnitsCompact(value)}
         <span
@@ -711,7 +716,7 @@ function UnitsStepper({
         type="button"
         onClick={() => onChange(value + 1)}
         className="w-8 h-8 rounded-full grid place-items-center transition hover:bg-white/10"
-        aria-label="Больше"
+        aria-label={t("room.more")}
       >
         <Plus className="w-4 h-4" strokeWidth={2.5} />
       </button>
@@ -732,6 +737,7 @@ function UnitsPickerDialog({
   onClose: () => void;
   onCommit: (v: number) => void;
 }) {
+  const t = useT();
   const maxPortions = Math.max(Math.ceil(item.quantity), 1);
   const maxPeople = 50;
   const portionOptions = Array.from({ length: maxPortions }, (_, i) => i + 1);
@@ -788,7 +794,7 @@ function UnitsPickerDialog({
     <DialogShell onClose={onClose} title={item.name}>
       <div className="space-y-5">
         <div>
-          <div className="text-xs text-mute mb-2">Количество позиций</div>
+          <div className="text-xs text-mute mb-2">{t("room.qtyOf")}</div>
           <Carousel
             options={portionOptions}
             value={portions}
@@ -797,7 +803,7 @@ function UnitsPickerDialog({
           />
         </div>
         <div>
-          <div className="text-xs text-mute mb-2 px-1">На количество человек</div>
+          <div className="text-xs text-mute mb-2 px-1">{t("room.peopleOf")}</div>
           <Carousel
             options={peopleOptions}
             value={people}
@@ -812,7 +818,7 @@ function UnitsPickerDialog({
             onClick={() => setCustomOpen(true)}
             className="text-xs text-accent hover:underline"
           >
-            Ввести вручную
+            {t("room.enterManual")}
           </button>
           <div className="text-sm tabular-nums text-mute">
             {customValue !== null ? (
@@ -828,7 +834,7 @@ function UnitsPickerDialog({
           onClick={() => onCommit(result)}
           className="btn btn-primary w-full"
         >
-          ОК
+          {t("common.ok")}
         </button>
       </div>
     </DialogShell>
@@ -846,6 +852,7 @@ function CustomValueDialog({
   onClose: () => void;
   onApply: (v: number) => void;
 }) {
+  const t = useT();
   const [text, setText] = useState(initial > 0 ? fmtUnits(initial) : "");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -858,11 +865,9 @@ function CustomValueDialog({
   const valid = Number.isFinite(parsed) && parsed >= 0;
 
   return (
-    <DialogShell onClose={onClose} onBack={onBack} title="Ввести вручную">
+    <DialogShell onClose={onClose} onBack={onBack} title={t("room.enterManual")}>
       <div className="space-y-4">
-        <div className="text-xs text-mute">
-          Сколько позиций ты взял. Дробное — твоя доля от одной (например, <span className="text-ink">0.5</span> — половина, <span className="text-ink">1.5</span> — полторы).
-        </div>
+        <div className="text-xs text-mute">{t("room.manualHelp")}</div>
         <input
           ref={inputRef}
           value={text}
@@ -879,7 +884,7 @@ function CustomValueDialog({
           data-1p-ignore
           data-lpignore="true"
           data-form-type="other"
-          placeholder="например, 0.33"
+          placeholder={t("room.manualPh")}
           className="input w-full text-center text-2xl font-semibold tabular-nums h-14"
         />
         <button
@@ -888,7 +893,7 @@ function CustomValueDialog({
           disabled={!valid}
           className="btn btn-primary w-full"
         >
-          ОК
+          {t("common.ok")}
         </button>
       </div>
     </DialogShell>
@@ -908,6 +913,7 @@ function DialogShell({
   onBack?: () => void;
   children: React.ReactNode;
 }) {
+  const t = useT();
   return (
     <div
       className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
@@ -923,7 +929,7 @@ function DialogShell({
               type="button"
               onClick={onBack}
               className="p-1 -ml-1 text-mute hover:text-ink transition shrink-0"
-              aria-label="Назад"
+              aria-label={t("common.back")}
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
@@ -936,7 +942,7 @@ function DialogShell({
             type="button"
             onClick={onClose}
             className="p-1 -mr-1 -mt-1 text-mute hover:text-ink transition shrink-0"
-            aria-label="Закрыть"
+            aria-label={t("common.close")}
           >
             <X className="w-5 h-5" />
           </button>
@@ -1068,6 +1074,7 @@ function ProgressStrip({
   room: Room;
   totals: ReturnType<typeof computeTotals>;
 }) {
+  const t = useT();
   const receiptTotal = receiptSubtotal(receipt) + receipt.serviceCharge + receipt.tax;
   const claimedTotal = totals.reduce((s, t) => s + t.total, 0);
   const remaining = receiptTotal - claimedTotal;
@@ -1086,8 +1093,9 @@ function ProgressStrip({
         </div>
         {!done && room.selections.length > 0 && (
           <div className="text-xs text-mute tabular-nums">
-            {remaining > 0 ? "осталось " : "перебор "}
-            {formatMoney(Math.abs(remaining), receipt.currency)}
+            {t(remaining > 0 ? "room.remaining" : "room.over", {
+              amount: formatMoney(Math.abs(remaining), receipt.currency),
+            })}
           </div>
         )}
       </div>

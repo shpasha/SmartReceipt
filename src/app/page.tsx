@@ -4,9 +4,11 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Camera, Sparkles, Upload, Users } from "lucide-react";
 import { apiUrl } from "@/lib/api";
+import { useT } from "@/lib/i18n/provider";
 
 export default function Home() {
   const router = useRouter();
+  const t = useT();
   const inputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,10 +28,10 @@ export default function Home() {
       fd.append("image", file);
       const res = await fetch(apiUrl("/api/receipts"), { method: "POST", body: fd });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Не удалось распознать чек");
+      if (!res.ok) throw new Error(data.error ?? t("home.parseError"));
       router.push(`/edit/${data.receipt.id}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка");
+      setError(e instanceof Error ? e.message : t("home.error"));
       setLoading(false);
     }
   }
@@ -38,11 +40,12 @@ export default function Home() {
     <main className="mx-auto max-w-3xl px-5 pt-16 pb-24">
       <header className="text-center mb-10">
         <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight bg-gradient-to-br from-white via-white to-white/60 bg-clip-text text-transparent">
-          Раздели счёт <span className="whitespace-nowrap bg-gradient-to-r from-accent to-accent2 bg-clip-text text-transparent">по-умному</span>
+          {t("home.heroPrefix")}{" "}
+          <span className="whitespace-nowrap bg-gradient-to-r from-accent to-accent2 bg-clip-text text-transparent">
+            {t("home.heroAccent")}
+          </span>
         </h1>
-        <p className="text-mute mt-4 max-w-lg mx-auto">
-          Загрузи чек из ресторана — мы распознаем позиции. Создай комнату, друзья выберут что ели — и каждый увидит свою&nbsp;долю.
-        </p>
+        <p className="text-mute mt-4 max-w-lg mx-auto">{t("home.heroSubtitle")}</p>
       </header>
 
       <div
@@ -66,7 +69,7 @@ export default function Home() {
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-accent to-accent2 grid place-items-center animate-pulse">
               <Sparkles className="w-7 h-7 text-bg" />
             </div>
-            <p className="text-lg">Расшифровываю позиции…</p>
+            <p className="text-lg">{t("home.parsing")}</p>
             <div className="w-64 space-y-2">
               <div className="skeleton h-4" />
               <div className="skeleton h-4 w-5/6" />
@@ -78,12 +81,12 @@ export default function Home() {
             <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-gradient-to-br from-accent/20 to-accent2/20 grid place-items-center border border-white/10">
               <Camera className="w-7 h-7 text-accent" />
             </div>
-            <h2 className="text-xl font-medium mb-2">Загрузи фото чека</h2>
-            <p className="text-mute mb-6 text-sm">JPG / PNG / HEIC · перетащи сюда или нажми кнопку</p>
+            <h2 className="text-xl font-medium mb-2">{t("home.dropTitle")}</h2>
+            <p className="text-mute mb-6 text-sm">{t("home.dropFormats")}</p>
             <div className="flex flex-wrap gap-3 justify-center">
               <label className="btn btn-primary cursor-pointer">
                 <Upload className="w-4 h-4" />
-                Выбрать файл
+                {t("home.chooseFile")}
                 <input
                   ref={inputRef}
                   type="file"
@@ -107,14 +110,14 @@ export default function Home() {
 
       <div className="mt-6 flex items-center gap-3 text-mute text-xs">
         <div className="h-px bg-white/10 flex-1" />
-        <span>уже есть код?</span>
+        <span>{t("home.haveCode")}</span>
         <div className="h-px bg-white/10 flex-1" />
       </div>
 
       <div className="mt-4 flex gap-2 justify-center">
         <input
           className="input w-44 text-center tracking-[0.4em] font-mono uppercase"
-          placeholder="ABCDE"
+          placeholder={t("home.codePlaceholder")}
           value={code}
           maxLength={5}
           inputMode="text"
@@ -137,15 +140,15 @@ export default function Home() {
           disabled={!codeValid}
           className="btn btn-ghost"
         >
-          Войти
+          {t("common.enter")}
           <ArrowRight className="w-4 h-4" />
         </button>
       </div>
 
       <section className="mt-14 grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Step n={1} icon={<Camera className="w-5 h-5" />} title="Загрузи фото чека" text="Распознаем позиции и цены за тебя." />
-        <Step n={2} icon={<Users className="w-5 h-5" />} title="Позови друзей" text="Отправь код — каждый зайдёт со своего телефона." />
-        <Step n={3} icon={<Sparkles className="w-5 h-5" />} title="Отметьте, кто что ел" text="Каждый выбирает своё — сумму посчитаем сами." />
+        <Step n={1} icon={<Camera className="w-5 h-5" />} title={t("home.step1Title")} text={t("home.step1Text")} />
+        <Step n={2} icon={<Users className="w-5 h-5" />} title={t("home.step2Title")} text={t("home.step2Text")} />
+        <Step n={3} icon={<Sparkles className="w-5 h-5" />} title={t("home.step3Title")} text={t("home.step3Text")} />
       </section>
     </main>
   );

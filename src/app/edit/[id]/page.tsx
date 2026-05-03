@@ -9,10 +9,12 @@ import type { Receipt, ReceiptItem } from "@/lib/domain/types";
 import { apiUrl } from "@/lib/api";
 import { itemTotal, receiptSubtotal } from "@/lib/domain/totals";
 import { formatMoney } from "@/lib/utils";
+import { useT } from "@/lib/i18n/provider";
 
 export default function ReceiptPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const t = useT();
   const searchParams = useSearchParams();
   const roomCode = searchParams.get("room");
   const editMode = !!roomCode;
@@ -50,7 +52,7 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
             ...r,
             items: [
               ...r.items,
-              { id: nanoid(8), name: "Новая позиция", quantity: 1, unitPrice: 0 },
+              { id: nanoid(8), name: t("edit.newItemName"), quantity: 1, unitPrice: 0 },
             ],
           }
         : r,
@@ -139,15 +141,15 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
   return (
     <main className="mx-auto max-w-2xl px-5 pt-10 pb-24">
       <div className="mb-6">
-        {!editMode && <div className="chip mb-2">Чек распознан</div>}
+        {!editMode && <div className="chip mb-2">{t("edit.parsedChip")}</div>}
         <h1 className="text-2xl font-semibold">
-          {editMode ? "Внести правки" : "Проверь позиции"}
+          {editMode ? t("edit.titleEdit") : t("edit.titleCheck")}
         </h1>
       </div>
 
       {editMode && (
         <div className="mb-4">
-          <div className="text-sm text-mute mb-1.5 px-1">Название комнаты</div>
+          <div className="text-sm text-mute mb-1.5 px-1">{t("edit.roomNameLabel")}</div>
           <input
             className="input w-full"
             value={roomName}
@@ -159,10 +161,10 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
 
       <div className="card overflow-hidden">
         <div className="hidden sm:grid px-4 py-2.5 grid-cols-[minmax(0,1fr)_80px_80px_minmax(96px,144px)_36px] gap-3 items-center text-xs uppercase tracking-wider text-mute border-b border-white/5 bg-white/[0.02]">
-          <div>Название</div>
-          <div className="text-center">Кол-во</div>
-          <div className="text-center">Цена</div>
-          <div className="text-right">Сумма</div>
+          <div>{t("edit.colName")}</div>
+          <div className="text-center">{t("edit.colQty")}</div>
+          <div className="text-center">{t("edit.colPrice")}</div>
+          <div className="text-right">{t("edit.colSum")}</div>
           <div />
         </div>
         <div className="divide-y divide-white/5">
@@ -176,33 +178,33 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
           />
         ))}
         {receipt.items.length === 0 && (
-          <div className="p-6 text-center text-mute text-sm">Нет позиций. Добавь вручную.</div>
+          <div className="p-6 text-center text-mute text-sm">{t("edit.noItems")}</div>
         )}
         </div>
         <button
           onClick={addItem}
           className="w-full flex items-center justify-center gap-2 py-3 text-sm text-mute hover:text-ink hover:bg-white/[0.03] border-t border-white/5 transition"
         >
-          <Plus className="w-4 h-4" /> Позиция
+          <Plus className="w-4 h-4" /> {t("edit.addItem")}
         </button>
       </div>
 
       <div className="card mt-4 p-5 space-y-3 text-sm">
         <EditableRow
-          label="Сервис"
+          label={t("edit.service")}
           value={receipt.serviceCharge}
           currency={receipt.currency}
           onChange={(v) => setReceipt((r) => (r ? { ...r, serviceCharge: v } : r))}
         />
         <EditableRow
-          label="Налог"
+          label={t("edit.tax")}
           value={receipt.tax}
           currency={receipt.currency}
           onChange={(v) => setReceipt((r) => (r ? { ...r, tax: v } : r))}
         />
         <div className="h-px bg-white/5" />
         <Row
-          label={<span className="font-medium text-base">Итого</span>}
+          label={<span className="font-medium text-base">{t("edit.total")}</span>}
           value={
             <span className="font-semibold text-base">
               {formatMoney(subtotal + receipt.serviceCharge + receipt.tax, receipt.currency)}
@@ -212,14 +214,14 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
       </div>
 
       <section className="mt-6">
-        <div className="text-sm text-mute mb-2 px-1">Комментарий</div>
+        <div className="text-sm text-mute mb-2 px-1">{t("edit.comment")}</div>
         <div className="card p-2">
           <textarea
             value={receipt.comment ?? ""}
             onChange={(e) =>
               setReceipt((r) => (r ? { ...r, comment: e.target.value } : r))
             }
-            placeholder="Реквизиты для перевода, кто оплатил, любые заметки…"
+            placeholder={t("edit.commentPh")}
             rows={2}
             maxLength={500}
             className="block w-full bg-transparent outline-none resize-none text-sm leading-relaxed p-2 placeholder:text-mute break-words whitespace-pre-wrap"
@@ -234,7 +236,7 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
             className="btn btn-ghost"
             disabled={saving}
           >
-            Отмена
+            {t("common.cancel")}
           </button>
           <button
             onClick={saveToRoom}
@@ -242,18 +244,18 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
             className="btn btn-primary whitespace-nowrap"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-            Сохранить
+            {t("edit.save")}
           </button>
         </div>
       ) : (
         <div className="card mt-6 p-5 space-y-3">
           <div>
-            <div className="font-medium mb-1">Создать комнату</div>
-            <p className="text-sm text-mute">Друзья подключатся по коду и выберут что ели.</p>
+            <div className="font-medium mb-1">{t("edit.createRoomTitle")}</div>
+            <p className="text-sm text-mute">{t("edit.createRoomDesc")}</p>
           </div>
           <input
             className="input w-full"
-            placeholder="Название (например, «Вечер четверга в Saperavi»)"
+            placeholder={t("edit.roomNamePh")}
             value={roomName}
             maxLength={60}
             onChange={(e) => setRoomName(e.target.value)}
@@ -261,7 +263,7 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
           <div className="flex gap-2">
             <input
               className="input w-full"
-              placeholder="Твоё имя"
+              placeholder={t("edit.yourName")}
               value={hostName}
               onChange={(e) => setHostName(e.target.value)}
             />
@@ -271,7 +273,7 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
               className="btn btn-primary whitespace-nowrap"
             >
               {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
-              Создать
+              {t("edit.create")}
             </button>
           </div>
         </div>
@@ -292,6 +294,7 @@ function ItemRow({
   onChange: (patch: Partial<ReceiptItem>) => void;
   onRemove: () => void;
 }) {
+  const t = useT();
   const [qty, setQty] = useState(String(item.quantity));
   const [price, setPrice] = useState(String(item.unitPrice));
 
@@ -310,12 +313,12 @@ function ItemRow({
         <input
           className="input flex-1 min-w-0"
           value={item.name}
-          placeholder="Название позиции"
+          placeholder={t("edit.itemNamePh")}
           onChange={(e) => onChange({ name: e.target.value })}
         />
         <button
           onClick={onRemove}
-          aria-label="Удалить позицию"
+          aria-label={t("edit.aria.remove")}
           className="text-mute hover:text-danger transition p-2 shrink-0 sm:justify-self-end sm:order-5"
         >
           <Trash2 className="w-4 h-4" />
@@ -333,7 +336,7 @@ function ItemRow({
           }}
           onBlur={commitQty}
           inputMode="decimal"
-          aria-label="Количество"
+          aria-label={t("edit.aria.qty")}
         />
         <span className="text-mute text-sm sm:hidden">×</span>
         <input
@@ -347,7 +350,7 @@ function ItemRow({
           }}
           onBlur={commitPrice}
           inputMode="decimal"
-          aria-label="Цена за единицу"
+          aria-label={t("edit.aria.price")}
         />
         <span className="text-mute text-sm sm:hidden">=</span>
         <div className="text-sm font-medium tabular-nums whitespace-nowrap sm:order-4 sm:text-right sm:ml-0">
