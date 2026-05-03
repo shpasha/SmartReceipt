@@ -829,13 +829,24 @@ function UnitsPickerDialog({
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => onCommit(result)}
-          className="btn btn-primary w-full"
-        >
-          {t("common.ok")}
-        </button>
+        <div className="flex gap-2">
+          {value > 0 && (
+            <button
+              type="button"
+              onClick={() => onCommit(0)}
+              className="btn btn-ghost flex-1"
+            >
+              {t("room.remove")}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => onCommit(result)}
+            className="btn btn-primary flex-1"
+          >
+            {t("common.ok")}
+          </button>
+        </div>
       </div>
     </DialogShell>
   );

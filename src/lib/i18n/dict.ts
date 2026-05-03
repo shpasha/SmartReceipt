@@ -83,6 +83,7 @@ export type Dict = {
     enterManual: string;
     manualHelp: string;
     manualPh: string;
+    remove: string;
     overTooltip: string;
     fullTooltip: string;
     overNote: string;
@@ -185,6 +186,7 @@ const ru: Dict = {
     enterManual: "Ввести вручную",
     manualHelp: "Сколько позиций ты взял. Дробное — твоя доля от одной (например, 0.5 — половина, 1.5 — полторы).",
     manualPh: "например, 0.33",
+    remove: "Убрать",
     overTooltip: "Разобрано больше чем в чеке",
     fullTooltip: "Позиция полностью разобрана",
     overNote: "разобрано {claimed} — больше чем в чеке ({total})",
@@ -287,6 +289,7 @@ const en: Dict = {
     enterManual: "Enter manually",
     manualHelp: "How many portions you had. A fraction is your share of one (e.g. 0.5 — half, 1.5 — one and a half).",
     manualPh: "e.g. 0.33",
+    remove: "Remove",
     overTooltip: "Claimed more than on the receipt",
     fullTooltip: "Fully claimed",
     overNote: "claimed {claimed} — more than on the receipt ({total})",
