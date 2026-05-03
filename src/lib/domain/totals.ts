@@ -63,19 +63,14 @@ export function computeTotals(receipt: Receipt, room: Room): ParticipantTotal[] 
     );
   }
   const serviceClaimed = [...serviceUnitsByParticipant.values()].reduce((a, b) => a + b, 0);
-  const fallbackClaimers = subtotalByParticipant.size;
-  const fallbackTipPerHead = fallbackClaimers > 0 ? receipt.serviceCharge / fallbackClaimers : 0;
 
   return room.participants.map((p) => {
     const sub = subtotalByParticipant.get(p.id) ?? 0;
-    const eats = sub > 0;
     const ratio = claimedSubtotal > 0 ? sub / claimedSubtotal : 0;
     const taxShare = receipt.tax * ratio;
     const tipShare =
       serviceClaimed > 0
         ? (serviceUnitsByParticipant.get(p.id) ?? 0) * receipt.serviceCharge
-        : eats
-        ? fallbackTipPerHead
         : 0;
     const share = taxShare + tipShare;
     return {

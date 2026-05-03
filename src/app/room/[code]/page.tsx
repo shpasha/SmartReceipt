@@ -1091,19 +1091,25 @@ function ProgressStrip({
   const remaining = receiptTotal - claimedTotal;
   const drift = receiptTotal > 0 ? Math.abs(remaining) / receiptTotal : 0;
   const done = claimedTotal > 0 && drift <= DRIFT_TOLERANCE;
+  const over = !done && remaining < 0;
   const pct = done ? 1 : receiptTotal > 0 ? Math.min(1, claimedTotal / receiptTotal) : 0;
 
   return (
     <div className="card p-4 mb-4">
       <div className="flex items-baseline justify-between text-sm mb-2">
         <div>
-          <span className={cn("tabular-nums font-medium", done ? "text-success" : "text-ink")}>
+          <span
+            className={cn(
+              "tabular-nums font-medium",
+              over ? "text-danger" : done ? "text-success" : "text-ink",
+            )}
+          >
             {formatMoney(claimedTotal, receipt.currency)}
           </span>
           <span className="text-mute"> / {formatMoney(receiptTotal, receipt.currency)}</span>
         </div>
         {!done && room.selections.length > 0 && (
-          <div className="text-xs text-mute tabular-nums">
+          <div className={cn("text-xs tabular-nums", over ? "text-danger" : "text-mute")}>
             {t(remaining > 0 ? "room.remaining" : "room.over", {
               amount: formatMoney(Math.abs(remaining), receipt.currency),
             })}
@@ -1112,7 +1118,10 @@ function ProgressStrip({
       </div>
       <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
         <div
-          className={cn("h-full transition-all", done ? "bg-success" : "bg-accent")}
+          className={cn(
+            "h-full transition-all",
+            over ? "bg-danger" : done ? "bg-success" : "bg-accent",
+          )}
           style={{ width: `${pct * 100}%` }}
         />
       </div>
