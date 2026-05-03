@@ -1069,7 +1069,7 @@ function ParticipantsStrip({ participants, meId }: { participants: Participant[]
       ))}
       {overflow && (
         <div
-          className="w-8 h-8 rounded-full bg-surface2 border-2 border-bg grid place-items-center text-xs font-semibold text-mute"
+          className="w-8 h-8 rounded-full bg-gradient-to-br from-accent to-accent2 border-2 border-bg grid place-items-center text-xs font-semibold text-bg"
           title={rest.map((p) => p.name).join(", ")}
         >
           +{rest.length}
