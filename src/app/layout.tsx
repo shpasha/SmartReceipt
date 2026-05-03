@@ -13,6 +13,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: dict[locale].meta.title,
     description: dict[locale].meta.description,
+    icons: { icon: [{ url: `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/icon.svg`, type: "image/svg+xml" }] },
   };
 }
 

@@ -17,6 +17,7 @@ import {
 import { formatMoney, cn, participantColor } from "@/lib/utils";
 import { apiUrl } from "@/lib/api";
 import { useT } from "@/lib/i18n/provider";
+import { rememberRoom } from "@/lib/recentRooms";
 
 const meKey = (code: string) => `room:${code}:me`;
 
@@ -166,6 +167,10 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
 
 
   const totals = useMemo(() => (receipt && room ? computeTotals(receipt, room) : []), [receipt, room]);
+
+  useEffect(() => {
+    if (me && room) rememberRoom(code, room.name || "");
+  }, [code, me, room?.name]);
 
   if (notFound) {
     return (

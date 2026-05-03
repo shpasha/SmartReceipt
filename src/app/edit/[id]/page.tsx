@@ -10,6 +10,7 @@ import { apiUrl } from "@/lib/api";
 import { itemTotal, receiptSubtotal } from "@/lib/domain/totals";
 import { formatMoney } from "@/lib/utils";
 import { useT } from "@/lib/i18n/provider";
+import { rememberRoom } from "@/lib/recentRooms";
 
 export default function ReceiptPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -116,6 +117,7 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
     const data = await res.json();
     if (data.room) {
       localStorage.setItem(`room:${data.room.code}:me`, JSON.stringify(data.you));
+      rememberRoom(data.room.code, data.room.name ?? roomName.trim());
       router.replace(`/room/${data.room.code}`);
     } else {
       setCreating(false);

@@ -22,6 +22,8 @@ export type Dict = {
     step2Text: string;
     step3Title: string;
     step3Text: string;
+    recent: string;
+    forgetRoom: string;
   };
   edit: {
     parsedChip: string;
@@ -125,6 +127,8 @@ const ru: Dict = {
     step2Text: "Отправь код — каждый зайдёт со своего телефона.",
     step3Title: "Отметьте, кто что ел",
     step3Text: "Каждый выбирает своё — сумму посчитаем сами.",
+    recent: "Недавние комнаты",
+    forgetRoom: "Убрать из списка",
   },
   edit: {
     parsedChip: "Чек распознан",
@@ -228,6 +232,8 @@ const en: Dict = {
     step2Text: "Share the code — everyone joins from their phone.",
     step3Title: "Mark what each had",
     step3Text: "Everyone picks their own — we do the math.",
+    recent: "Recent rooms",
+    forgetRoom: "Remove from list",
   },
   edit: {
     parsedChip: "Receipt parsed",

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Camera, Sparkles, Upload, Users } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { useT } from "@/lib/i18n/provider";
+import { RecentRooms } from "@/components/RecentRooms";
 
 export default function Home() {
   const router = useRouter();
@@ -150,6 +151,10 @@ export default function Home() {
         <Step n={2} icon={<Users className="w-5 h-5" />} title={t("home.step2Title")} text={t("home.step2Text")} />
         <Step n={3} icon={<Sparkles className="w-5 h-5" />} title={t("home.step3Title")} text={t("home.step3Text")} />
       </section>
+
+      <div className="mt-14">
+        <RecentRooms />
+      </div>
     </main>
   );
 }
