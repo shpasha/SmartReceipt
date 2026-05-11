@@ -11,6 +11,7 @@ import { itemTotal, receiptSubtotal } from "@/lib/domain/totals";
 import { formatMoney } from "@/lib/utils";
 import { useT } from "@/lib/i18n/provider";
 import { rememberRoom } from "@/lib/recentRooms";
+import { getLastName, setLastName } from "@/lib/lastName";
 
 export default function ReceiptPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -39,6 +40,10 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
       .then((r) => r.json())
       .then((d) => setReceipt(d.receipt));
   }, [id]);
+
+  useEffect(() => {
+    if (!editMode) setHostName(getLastName());
+  }, [editMode]);
 
   function updateItem(itemId: string, patch: Partial<ReceiptItem>) {
     setReceipt((r) =>
@@ -127,6 +132,7 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
     if (data.room) {
       localStorage.setItem(`room:${data.room.code}:me`, JSON.stringify(data.you));
       rememberRoom(data.room.code, data.room.name ?? roomName.trim());
+      setLastName(hostName);
       router.replace(`/room/${data.room.code}`);
     } else {
       setCreating(false);

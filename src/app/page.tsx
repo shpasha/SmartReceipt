@@ -29,10 +29,23 @@ export default function Home() {
       fd.append("image", file);
       const res = await fetch(apiUrl("/api/receipts"), { method: "POST", body: fd });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? t("home.parseError"));
+      if (!res.ok) {
+        const kind: string | undefined = data?.kind;
+        const key =
+          kind === "not_a_receipt"
+            ? "home.errNotReceipt"
+            : kind === "parse_failed"
+              ? "home.errParseFailed"
+              : kind === "transient"
+                ? "home.errTransient"
+                : "home.errUnknown";
+        setError(t(key));
+        setLoading(false);
+        return;
+      }
       router.push(`/edit/${data.receipt.id}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t("home.error"));
+    } catch {
+      setError(t("home.errUnknown"));
       setLoading(false);
     }
   }

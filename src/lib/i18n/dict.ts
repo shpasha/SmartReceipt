@@ -16,6 +16,10 @@ export type Dict = {
     codePlaceholder: string;
     parseError: string;
     error: string;
+    errNotReceipt: string;
+    errParseFailed: string;
+    errTransient: string;
+    errUnknown: string;
     step1Title: string;
     step1Text: string;
     step2Title: string;
@@ -122,6 +126,10 @@ const ru: Dict = {
     codePlaceholder: "ABCDE",
     parseError: "Не удалось распознать чек",
     error: "Ошибка",
+    errNotReceipt: "На фото не похоже на чек — попробуй ещё раз",
+    errParseFailed: "Не удалось распознать чек. Попробуй сделать фото ярче и без бликов",
+    errTransient: "Сервис распознавания временно недоступен. Попробуй ещё раз через минуту",
+    errUnknown: "Что-то пошло не так. Попробуй ещё раз",
     step1Title: "Загрузи фото чека",
     step1Text: "Распознаем позиции и цены за тебя.",
     step2Title: "Позови друзей",
@@ -228,6 +236,10 @@ const en: Dict = {
     codePlaceholder: "ABCDE",
     parseError: "Couldn't read the receipt",
     error: "Error",
+    errNotReceipt: "This doesn't look like a receipt — try another photo",
+    errParseFailed: "Couldn't read the receipt. Try a brighter photo without glare",
+    errTransient: "The recognition service is temporarily unavailable. Try again in a minute",
+    errUnknown: "Something went wrong. Please try again",
     step1Title: "Upload a receipt photo",
     step1Text: "We read the items and prices for you.",
     step2Title: "Invite your friends",
